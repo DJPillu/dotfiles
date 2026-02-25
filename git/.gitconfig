@@ -1,0 +1,9 @@
+[user]
+    name = Rujul Arora
+    email = rujularoracs@gmail.com
+
+#[includeIf "gitdir:~/xAI/"]
+#    path = ~/.gitconfig-xai
+[includeIf "gitdir/i:~/xAI/"]
+    path = ~/.gitconfig-xai
+
