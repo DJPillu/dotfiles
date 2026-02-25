@@ -9,6 +9,12 @@ info()  { printf "\033[1;34m[info]\033[0m  %s\n" "$1"; }
 ok()    { printf "\033[1;32m[ok]\033[0m    %s\n" "$1"; }
 warn()  { printf "\033[1;33m[warn]\033[0m  %s\n" "$1"; }
 
+# ── Git submodules ────────────────────────────────────────────────
+info "Initializing submodules..."
+cd "$DOTFILES"
+git submodule update --init --recursive
+ok "Submodules initialized"
+
 # ── Homebrew ──────────────────────────────────────────────────────
 if ! command -v brew &>/dev/null; then
     info "Installing Homebrew..."
