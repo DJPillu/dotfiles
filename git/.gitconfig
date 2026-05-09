@@ -7,3 +7,5 @@
 [includeIf "gitdir/i:~/xAI/"]
     path = ~/.gitconfig-xai
 
+[init]
+	defaultBranch = main
