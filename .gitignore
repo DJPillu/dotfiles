@@ -3,3 +3,9 @@
 *.swo
 *~
 .netrwhist
+
+# TPM-installed tmux plugins (cloned into the stowed config at runtime)
+tmux/.config/tmux/plugins/
+
+# Local OMZ state if it ever gets stowed accidentally
+.config/oh-my-zsh/
