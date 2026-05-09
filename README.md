@@ -67,19 +67,6 @@ Displays a toggle menu where you select which modules to install.
 ./install.sh --exclude packages,tpm
 ```
 
-**Update existing installs:**
-
-```bash
-./install.sh --update            # update everything
-./install.sh --update --only omz # update only OMZ + plugins + p10k
-```
-
-In update mode each module upgrades what it installed (`brew upgrade`,
-`apt upgrade`, `git pull` for OMZ/plugins/p10k/tpm, re-runs the NVM
-installer at the pinned version, and refreshes submodules to their
-latest remote commit). Without `--update`, an existing install is left
-untouched.
-
 **Available modules:** `submodules`, `packages`, `omz`, `stow`, `tpm`, `nvm`
 
 ### What Each Module Does
@@ -102,31 +89,6 @@ and the install script stows either `zsh-macos/` or `zsh-linux/` based on the de
 For example, on macOS `~/.zshrc.d/00-brew.zsh` sets up Homebrew and adds the
 `brew` omz plugin. On Linux, `~/.zshrc.d/50-apt-compat.zsh` aliases `fdfind`
 to `fd` and `batcat` to `bat` for Debian/Ubuntu compatibility.
-
-## Using on Multiple Machines (macOS + WSL Linux)
-
-The repo is designed to be cloned and updated on multiple machines without
-clashes:
-
-- **Per-machine state** lives outside the repo. Oh My Zsh
-  (`~/.config/oh-my-zsh`), its plugins, Powerlevel10k, TPM
-  (`~/.tmux/plugins/tpm`), and NVM (`~/.nvm`) are cloned into `$HOME` —
-  not into the dotfiles repo. Updating them on one machine never touches
-  the other.
-- **Repo content is shared.** The OS-specific bits live in separate stow
-  packages (`zsh-macos/` vs `zsh-linux/`), so each machine only stows
-  what's relevant to it. The shared `.zshrc` / `.bashrc` work on both.
-- **Brewfile is macOS-only**; the apt package list is inline in
-  `install.sh`. They're independent — adding a tool to one doesn't
-  silently affect the other.
-
-Recommended workflow on a second machine:
-
-```bash
-cd ~/.dotfiles
-git pull
-./install.sh --update         # pull latest plugins + upgrade packages
-```
 
 ## Usage
 
