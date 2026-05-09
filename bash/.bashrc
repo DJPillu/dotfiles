@@ -3,6 +3,9 @@ cd ~
 # wslu setup for Windows default browser access
 export BROWSER=wslview
 
+# install neovim from pre-built binary script, requires export
+export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
+
 # ~/.bashrc: executed by bash(1) for non-login shells.
 # see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
 # for examples
