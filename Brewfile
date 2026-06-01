@@ -1,4 +1,5 @@
 brew "bat"
+brew "git-delta"
 brew "dos2unix"
 brew "eza"
 brew "fd"

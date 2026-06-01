@@ -1,7 +1,9 @@
 # Dotfiles
 
 Personal configuration files managed with [GNU Stow](https://www.gnu.org/software/stow/).
-Works on **macOS** and **Linux** (Debian/Ubuntu/WSL2).
+Works on **macOS** (zsh) and **WSL/Linux** (bash).
+
+See [CHANGELOG.md](CHANGELOG.md) for recent changes.
 
 ## Quick Start
 
@@ -16,16 +18,15 @@ The install script is idempotent — safe to re-run at any time.
 ## Structure
 
 Each top-level directory is a stow package that mirrors `$HOME`.
-OS-specific configs live in `*-macos/` and `*-linux/` packages using a `.d` source directory pattern.
+OS-specific shell configs use a `.d` source directory pattern.
 
 ```
 .dotfiles/
 ├── zsh/            .zshrc, .zshenv, .p10k.zsh (shared)
-├── zsh-macos/      .zshrc.d/ (brew, conda, rancher)
-├── zsh-linux/      .zshrc.d/ (apt compatibility aliases)
+├── zsh-macos/      .zshrc.d/ (brew, conda, rancher, gcloud) — macOS only
 ├── bash/           .bashrc, .bash_profile (shared)
-├── bash-macos/     .bashrc.d/ (brew, conda, rancher)
-├── bash-linux/     .bashrc.d/ (apt compatibility aliases)
+├── bash-linux/     .bashrc.d/ (WSL, apt-compat, conda) — Linux/WSL only
+├── local/          .local/bin/ (env, tmux-copy)
 ├── git/            .gitconfig, .gitconfig-xai
 ├── nvim/           .config/nvim/ (LazyVim)
 ├── tmux/           .config/tmux/tmux.conf
@@ -36,6 +37,8 @@ OS-specific configs live in `*-macos/` and `*-linux/` packages using a `.d` sour
 ├── Brewfile        Homebrew packages (macOS)
 └── install.sh      Bootstrap script
 ```
+
+**Platform model:** macOS uses zsh (`zsh-macos` stowed); WSL uses bash (`bash-linux` stowed).
 
 ## Install Script
 
@@ -74,7 +77,7 @@ Displays a toggle menu where you select which modules to install.
 | Module | Description |
 |-----------|----------------------------------------------------------|
 | submodules | Initializes git submodules |
-| packages | Installs CLI tools via Homebrew (macOS) or apt (Linux) |
+| packages | Installs CLI tools via Homebrew (macOS) or apt (Linux/WSL) |
 | omz | Installs Oh My Zsh, custom plugins, and Powerlevel10k |
 | stow | Symlinks all config packages to `$HOME` |
 | tpm | Installs Tmux Plugin Manager |
@@ -83,12 +86,20 @@ Displays a toggle menu where you select which modules to install.
 ## OS-Specific Config (.d Pattern)
 
 Shell configs use a `.d` source directory pattern for OS-specific setup.
-The shared `.zshrc` sources all files in `~/.zshrc.d/` before loading Oh My Zsh,
-and the install script stows either `zsh-macos/` or `zsh-linux/` based on the detected OS.
+
+- **macOS:** shared `.zshrc` sources `~/.zshrc.d/*.zsh` before Oh My Zsh; install stows `zsh-macos/`.
+- **WSL/Linux:** shared `.bashrc` sources `~/.bashrc.d/*.sh` at the end; install stows `bash-linux/`.
 
 For example, on macOS `~/.zshrc.d/00-brew.zsh` sets up Homebrew and adds the
-`brew` omz plugin. On Linux, `~/.zshrc.d/50-apt-compat.zsh` aliases `fdfind`
+`brew` omz plugin. On WSL, `~/.bashrc.d/50-apt-compat.sh` aliases `fdfind`
 to `fd` and `batcat` to `bat` for Debian/Ubuntu compatibility.
+
+## Ghostty (macOS)
+
+Ghostty reads config from both `~/.config/ghostty/config` and
+`~/Library/Application Support/com.mitchellh.ghostty/config`. On macOS,
+`./install.sh` symlinks the Application Support path to the stowed dotfiles config
+so a single file is the source of truth.
 
 ## Usage
 

@@ -196,8 +196,8 @@ if enabled packages; then
         fi
         info "Installing packages via apt..."
         sudo apt install -y \
-            bat eza fd-find fzf neovim ripgrep stow \
-            tldr tmux wget zoxide dos2unix
+            bat eza fd-find fzf git-delta neovim ripgrep stow \
+            tldr tmux wget wslu zoxide dos2unix
         ok "apt packages installed"
     fi
 fi
@@ -244,11 +244,11 @@ fi
 
 # ── Module: stow ─────────────────────────────────────────────────
 if enabled stow; then
-    SHARED_PACKAGES=(zsh bash git nvim tmux ghostty alacritty ssh conda)
+    SHARED_PACKAGES=(zsh bash git nvim tmux ghostty alacritty ssh conda local)
     if [[ "$OS" == "Darwin" ]]; then
-        OS_PACKAGES=(zsh-macos bash-macos)
+        OS_PACKAGES=(zsh-macos)
     else
-        OS_PACKAGES=(zsh-linux bash-linux)
+        OS_PACKAGES=(bash-linux)
     fi
     ALL_STOW=("${SHARED_PACKAGES[@]}" "${OS_PACKAGES[@]}")
 
@@ -261,6 +261,16 @@ if enabled stow; then
             ok "Stowed $pkg"
         fi
     done
+
+    if [[ "$OS" == "Darwin" ]]; then
+        GHOSTTY_XDG="$HOME/.config/ghostty/config"
+        GHOSTTY_APP="$HOME/Library/Application Support/com.mitchellh.ghostty"
+        if [ -f "$GHOSTTY_XDG" ]; then
+            mkdir -p "$GHOSTTY_APP"
+            ln -sf "$GHOSTTY_XDG" "$GHOSTTY_APP/config"
+            ok "Linked Ghostty Application Support config to dotfiles"
+        fi
+    fi
 fi
 
 # ── Module: tpm ──────────────────────────────────────────────────

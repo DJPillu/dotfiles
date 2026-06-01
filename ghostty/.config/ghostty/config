@@ -41,6 +41,11 @@ auto-update-channel = tip
 
 # Keybindings
 keybind = clear
+# Shell line/word navigation (defaults removed by keybind=clear above)
+keybind = alt+left=esc:b
+keybind = alt+right=esc:f
+keybind = super+left=text:\x01
+keybind = super+right=text:\x05
 keybind = super+shift+comma=reload_config
 
 keybind = super+n=new_window
