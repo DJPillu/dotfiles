@@ -80,3 +80,12 @@ eval "$(zoxide init zsh --cmd cd)"
 [[ ! -f "${POWERLEVEL9K_CONFIG_FILE}" ]] || source "${POWERLEVEL9K_CONFIG_FILE}"
 
 export PATH="$HOME/.grok/bin:$PATH"
+export PATH="/Users/rujul/.duckdb/cli/latest":$PATH
+export REPORTTIME=3
+
+# Enable extended history tracking (records timestamps and duration)
+setopt EXTENDED_HISTORY
+
+# Append commands immediately to history with duration tracked
+setopt INC_APPEND_HISTORY_TIME
+
