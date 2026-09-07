@@ -35,7 +35,9 @@ plugins=(
 if [[ -f "$ZSH/oh-my-zsh.sh" ]]; then
   source "$ZSH/oh-my-zsh.sh"
 else
-  autoload -Uz compinit && compinit
+  # Degraded mode (omz module not run yet): plain completion, ignore the
+  # "insecure directories" prompt that group-writable dirs (e.g. CI) trigger.
+  autoload -Uz compinit && compinit -u
 fi
 
 export TERM=xterm-256color
