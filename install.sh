@@ -130,8 +130,14 @@ valid_module() {
 # ── CLI argument parsing ─────────────────────────────────────────
 INTERACTIVE=true
 UPDATE_MODE=false
-declare -A ENABLED
-for m in "${ALL_MODULES[@]}"; do ENABLED[$m]=1; done
+# Enabled set kept as a space-delimited string: stock macOS bash is 3.2 and
+# has no associative arrays.
+ENABLED_SET=" ${ALL_MODULES[*]} "
+enabled()     { [[ "$ENABLED_SET" == *" $1 "* ]]; }
+enable_mod()  { enabled "$1" || ENABLED_SET="${ENABLED_SET}$1 "; }
+disable_mod() { ENABLED_SET="${ENABLED_SET// $1 / }"; }
+enable_all()  { ENABLED_SET=" ${ALL_MODULES[*]} "; }
+disable_all() { ENABLED_SET=" "; }
 
 usage() {
     cat <<'EOF'
@@ -161,11 +167,11 @@ EOF
 
 set_only() {
     INTERACTIVE=false
-    for m in "${ALL_MODULES[@]}"; do ENABLED[$m]=0; done
+    disable_all
     IFS=',' read -ra MODS <<< "$1"
     for m in "${MODS[@]}"; do
         valid_module "$m" || { err "Unknown module: $m"; exit 1; }
-        ENABLED[$m]=1
+        enable_mod "$m"
     done
 }
 
@@ -179,7 +185,7 @@ while [[ $# -gt 0 ]]; do
             IFS=',' read -ra MODS <<< "$2"
             for m in "${MODS[@]}"; do
                 valid_module "$m" || { err "Unknown module: $m"; exit 1; }
-                ENABLED[$m]=0
+                disable_mod "$m"
             done
             shift 2 ;;
         -u|--update) UPDATE_MODE=true; shift ;;
@@ -207,19 +213,19 @@ if $INTERACTIVE; then
     while true; do
         for i in "${!ALL_MODULES[@]}"; do
             m="${ALL_MODULES[$i]}"
-            if [[ "${ENABLED[$m]}" -eq 1 ]]; then printf "  %d) [x] %s\n" "$((i+1))" "$m"
+            if enabled "$m"; then printf "  %d) [x] %s\n" "$((i+1))" "$m"
             else printf "  %d) [ ] %s\n" "$((i+1))" "$m"; fi
         done
         echo ""
         read -rp "Choice [1-${#ALL_MODULES[@]}/a/n/Enter]: " choice <&3
         case "$choice" in
-            a) for m in "${ALL_MODULES[@]}"; do ENABLED[$m]=1; done ;;
-            n) for m in "${ALL_MODULES[@]}"; do ENABLED[$m]=0; done ;;
+            a) enable_all ;;
+            n) disable_all ;;
             "") break ;;
             *)
                 if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#ALL_MODULES[@]} )); then
                     m="${ALL_MODULES[$((choice-1))]}"
-                    ENABLED[$m]=$(( 1 - ENABLED[$m] ))
+                    if enabled "$m"; then disable_mod "$m"; else enable_mod "$m"; fi
                 else
                     warn "Invalid choice: $choice"
                 fi ;;
@@ -228,8 +234,6 @@ if $INTERACTIVE; then
     done
     exec 3<&-
 fi
-
-enabled() { [[ "${ENABLED[$1]}" -eq 1 ]]; }
 
 info "Detected: $(os_label)"
 cd "$DOTFILES"
@@ -264,7 +268,7 @@ install_nvim_linux() {
         rm -rf "$tmp"
         ok "Neovim $("$NVIM_OPT_LINK/bin/nvim" --version | head -n1 | awk '{print $2}') installed"
     fi
-    if dpkg -s neovim &>/dev/null; then
+    if have dpkg && dpkg -s neovim &>/dev/null; then
         warn "apt 'neovim' package is also installed (old). Remove it to avoid confusion: sudo apt remove neovim"
     fi
 }
@@ -412,16 +416,12 @@ if enabled omz; then
             ok "Oh My Zsh already installed"
         fi
 
-        declare -A zsh_plugins=(
-            [zsh-autosuggestions]="https://github.com/zsh-users/zsh-autosuggestions.git"
-            [zsh-syntax-highlighting]="https://github.com/zsh-users/zsh-syntax-highlighting.git"
-            [zsh-completions]="https://github.com/zsh-users/zsh-completions.git"
-        )
-        for name in "${!zsh_plugins[@]}"; do
+        for repo in zsh-users/zsh-autosuggestions zsh-users/zsh-syntax-highlighting zsh-users/zsh-completions; do
+            name="${repo##*/}"
             dest="$OMZ_CUSTOM/plugins/$name"
             if [[ ! -d "$dest" ]]; then
                 info "Cloning $name..."
-                git clone --depth=1 --quiet "${zsh_plugins[$name]}" "$dest"
+                git clone --depth=1 --quiet "https://github.com/$repo.git" "$dest"
             elif $UPDATE_MODE; then git_pull "$dest" "$name"
             else ok "$name already installed"; fi
         done
@@ -614,7 +614,7 @@ if enabled doctor; then
         else
             dr_ok "nvim" "$NVIM_VER  $NVIM_PATH"
         fi
-        dpkg -s neovim &>/dev/null && dr_warn "nvim" "apt package 'neovim' still installed: sudo apt remove neovim"
+        $IS_LINUX && have dpkg && dpkg -s neovim &>/dev/null && dr_warn "nvim" "apt package 'neovim' still installed: sudo apt remove neovim"
     else
         dr_fail "nvim" "not found"
     fi
