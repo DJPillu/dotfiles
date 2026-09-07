@@ -1,19 +1,32 @@
 # Dotfiles
 
 Personal configuration files managed with [GNU Stow](https://www.gnu.org/software/stow/).
-Works on **macOS** (zsh) and **WSL/Linux** (bash).
+Works on **macOS** (zsh) and **WSL/Ubuntu** (bash).
 
 See [CHANGELOG.md](CHANGELOG.md) for recent changes.
 
-## Quick Start
+## Quick Start (new machine, one command)
 
 ```bash
-git clone --recurse-submodules git@github.com:DJPillu/dotfiles.git ~/.dotfiles
-cd ~/.dotfiles
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/DJPillu/dotfiles/main/bootstrap.sh | bash
 ```
 
-The install script is idempotent — safe to re-run at any time.
+`bootstrap.sh` needs nothing pre-installed. It:
+
+1. Installs `git`/`curl` (macOS: Xcode Command Line Tools + Homebrew; Ubuntu: apt).
+2. Clones this repo over HTTPS to `~/.dotfiles` (or fast-forwards an existing checkout) and initialises submodules.
+3. Runs `./install.sh --all` (one `sudo` prompt up front on Linux, then unattended).
+4. Switches the git remote to SSH once an SSH key is authorised on GitHub.
+
+Pass installer flags through, e.g. `... | bash -s -- --only stow,doctor`.
+
+Already cloned? Just run:
+
+```bash
+cd ~/.dotfiles && ./install.sh --all
+```
+
+Both scripts are idempotent and safe to re-run at any time.
 
 ## Structure
 
@@ -22,77 +35,71 @@ OS-specific shell configs use a `.d` source directory pattern.
 
 ```
 .dotfiles/
+├── shell/          .config/shell/common.sh (aliases, fzf, zoxide, nvm, EDITOR — shared by bash and zsh)
 ├── zsh/            .zshrc, .zshenv, .p10k.zsh (shared)
-├── zsh-macos/      .zshrc.d/ (brew, conda, rancher, gcloud) — macOS only
+├── zsh-macos/      .zshrc.d/ (brew, hostname, conda, rancher, gcloud) — macOS only
 ├── bash/           .bashrc, .bash_profile (shared)
-├── bash-linux/     .bashrc.d/ (WSL, apt-compat, conda) — Linux/WSL only
+├── bash-linux/     .bashrc.d/ (nvim PATH, wslview, conda) — Linux/WSL only
+├── git/            .gitconfig, .gitconfig-xai (shared)
+├── git-macos/      .gitconfig.local (osxkeychain credential helper)
+├── git-wsl/        .gitconfig.local (Git Credential Manager from Git for Windows)
+├── git-linux/      .gitconfig.local (cache credential helper)
 ├── local/          .local/bin/ (env, tmux-copy)
-├── git/            .gitconfig, .gitconfig-xai
 ├── nvim/           .config/nvim/ (LazyVim)
 ├── tmux/           .config/tmux/tmux.conf
 ├── ghostty/        .config/ghostty/ (shaders as submodule)
 ├── alacritty/      .config/alacritty/
 ├── ssh/            .ssh/config
 ├── conda/          .condarc
-├── Brewfile        Homebrew packages (macOS)
-└── install.sh      Bootstrap script
+├── Brewfile        Homebrew packages, casks and fonts (macOS)
+├── bootstrap.sh    Zero-prerequisite entrypoint (curl | bash)
+└── install.sh      Modular installer
 ```
 
-**Platform model:** macOS uses zsh (`zsh-macos` stowed); WSL uses bash (`bash-linux` stowed).
+**Platform model:** macOS uses zsh (`zsh-macos` + `git-macos` stowed); WSL uses bash (`bash-linux` + `git-wsl` stowed).
 
 ## Install Script
 
 The installer is modular — run it interactively to pick modules, or use CLI flags.
 
-**Interactive mode** (default):
-
 ```bash
-./install.sh
-```
-
-Displays a toggle menu where you select which modules to install.
-
-**Run everything non-interactively:**
-
-```bash
-./install.sh --all
-```
-
-**Run only specific modules:**
-
-```bash
+./install.sh                     # interactive toggle menu
+./install.sh --all               # everything, non-interactive
 ./install.sh --only packages,stow
+./install.sh --exclude omz,tpm
+./install.sh --check             # run only the doctor
+./install.sh --all --update      # upgrade brew/apt, nvim, omz, plugins, tpm, nvm
 ```
 
-**Exclude specific modules:**
+| Module     | Description |
+|------------|-------------|
+| submodules | Initialises git submodules (ghostty shaders) |
+| packages   | CLI tools via Homebrew (macOS) or apt (Ubuntu). On Linux also installs the latest Neovim tarball to `/opt/nvim` (apt's neovim is too old for LazyVim) |
+| extras     | Tools the shell configs assume: `rustup`, `miniforge` (`~/miniforge3`), `uv`, `duckdb`, `gh`; Nerd Fonts and Ghostty/Alacritty casks on macOS. None of these installers are allowed to edit rc files |
+| omz        | Oh My Zsh, zsh-autosuggestions / syntax-highlighting / completions, Powerlevel10k |
+| stow       | Symlinks all packages into `$HOME`. Existing files that would conflict are moved to `~/.dotfiles-backup/<timestamp>/` (never adopted into the repo). Uses `--no-folding` so `~/.ssh`, `~/.local/bin`, `~/.config/*` stay real directories |
+| tpm        | Tmux Plugin Manager, then installs the plugins listed in `tmux.conf` |
+| nvm        | Node Version Manager (latest release, no rc edits) |
+| doctor     | Verifies tool paths and versions (flags `nvim` < 0.10 or the apt build shadowing `/opt`), stow symlinks, `~/.ssh` permissions, and that the repo is clean |
 
-```bash
-./install.sh --exclude packages,tpm
-```
-
-**Available modules:** `submodules`, `packages`, `omz`, `stow`, `tpm`, `nvm`
-
-### What Each Module Does
-
-| Module | Description |
-|-----------|----------------------------------------------------------|
-| submodules | Initializes git submodules |
-| packages | Installs CLI tools via Homebrew (macOS) or apt (Linux/WSL) |
-| omz | Installs Oh My Zsh, custom plugins, and Powerlevel10k |
-| stow | Symlinks all config packages to `$HOME` |
-| tpm | Installs Tmux Plugin Manager |
-| nvm | Installs Node Version Manager |
+`doctor` runs at the end of `--all` and exits non-zero on problems.
 
 ## OS-Specific Config (.d Pattern)
 
-Shell configs use a `.d` source directory pattern for OS-specific setup.
+- **Shared:** `~/.config/shell/common.sh` holds everything common to bash and zsh (eza/bat/fd/rg aliases, fzf, zoxide, nvm, `EDITOR=nvim`, PATH additions). Every tool is guarded, so a machine without it never sees errors on shell start.
+- **macOS:** `.zshrc` sources `~/.zshrc.d/*.zsh` before Oh My Zsh; install stows `zsh-macos/`.
+- **WSL/Linux:** `.bashrc` sources `~/.bashrc.d/*.sh` before `common.sh`; install stows `bash-linux/`. `00-linux.sh` puts `/opt/nvim/bin` first on `PATH` and sets `BROWSER=wslview` only when running under WSL.
 
-- **macOS:** shared `.zshrc` sources `~/.zshrc.d/*.zsh` before Oh My Zsh; install stows `zsh-macos/`.
-- **WSL/Linux:** shared `.bashrc` sources `~/.bashrc.d/*.sh` at the end; install stows `bash-linux/`.
+## Windows side (WSL)
 
-For example, on macOS `~/.zshrc.d/00-brew.zsh` sets up Homebrew and adds the
-`brew` omz plugin. On WSL, `~/.bashrc.d/50-apt-compat.sh` aliases `fdfind`
-to `fd` and `batcat` to `bat` for Debian/Ubuntu compatibility.
+Everything inside WSL is handled by the installer. Two things live on the Windows host and must be done once, in PowerShell:
+
+```powershell
+winget install --id Microsoft.WindowsTerminal -e
+winget install --id DEVCOM.JetBrainsMonoNerdFont -e     # or Microsoft.CascadiaCode for "Cascadia Mono NF"
+```
+
+Then set the terminal font to the Nerd Font so eza / p10k icons render. `doctor` reminds you of this on WSL.
 
 ## Ghostty (macOS)
 
@@ -106,7 +113,7 @@ so a single file is the source of truth.
 **Stow a single package:**
 
 ```bash
-cd ~/.dotfiles && stow nvim
+cd ~/.dotfiles && stow --no-folding nvim
 ```
 
 **Unstow (remove symlinks):**
@@ -115,10 +122,10 @@ cd ~/.dotfiles && stow nvim
 cd ~/.dotfiles && stow -D nvim
 ```
 
-**Re-stow (refresh after changes):**
+**Re-stow (refresh after adding files to a package):**
 
 ```bash
-cd ~/.dotfiles && stow -R nvim
+cd ~/.dotfiles && ./install.sh --only stow
 ```
 
 **Add a new config:**
@@ -126,15 +133,22 @@ cd ~/.dotfiles && stow -R nvim
 ```bash
 mkdir -p ~/.dotfiles/newpkg/.config/newpkg
 mv ~/.config/newpkg/config ~/.dotfiles/newpkg/.config/newpkg/
-cd ~/.dotfiles && stow newpkg
+# add "newpkg" to SHARED_PACKAGES in install.sh, then:
+cd ~/.dotfiles && ./install.sh --only stow
 ```
 
 **Update submodules (e.g. ghostty shaders):**
 
 ```bash
-cd ~/.dotfiles/ghostty/.config/ghostty/shaders
-git pull origin main
-cd ~/.dotfiles
-git add ghostty/.config/ghostty/shaders
-git commit -m "update ghostty shaders"
+cd ~/.dotfiles && ./install.sh --only submodules --update
+git add ghostty/.config/ghostty/shaders && git commit -m "chore: update ghostty shaders"
+```
+
+## Development
+
+`shellcheck` runs on every push (see `.github/workflows/ci.yml`) along with a
+smoke run of `./install.sh --only stow,doctor` on Ubuntu and macOS. Locally:
+
+```bash
+shellcheck install.sh bootstrap.sh bash/.bashrc bash-linux/.bashrc.d/*.sh shell/.config/shell/common.sh
 ```

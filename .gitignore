@@ -2,9 +2,22 @@
 *.swp
 *.swo
 *~
+*.bak
 .netrwhist
 
-# TPM-installed tmux plugins (cloned into the stowed config at runtime)
+# Never commit private key material or host lists, even if ~/.ssh gets folded
+ssh/.ssh/id_*
+ssh/.ssh/*.pub
+ssh/.ssh/*known_hosts*
+ssh/.ssh/authorized_keys
+ssh/.ssh/*.pem
+
+# Only the tracked helper scripts belong in local/.local/bin
+local/.local/bin/*
+!local/.local/bin/env
+!local/.local/bin/tmux-copy
+
+# TPM-installed tmux plugins (legacy location; now live in ~/.config/tmux/plugins)
 tmux/.config/tmux/plugins/
 
 # Local OMZ state if it ever gets stowed accidentally

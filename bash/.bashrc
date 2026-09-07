@@ -1,15 +1,23 @@
 # ~/.bashrc: executed by bash(1) for non-login shells.
+# Shared cross-platform bash config. Tool aliases/PATH live in
+# ~/.config/shell/common.sh (shared with zsh); OS-specific bits in ~/.bashrc.d/.
+# Deliberately no "return if non-interactive" guard so PATH is also correct
+# for `bash -c ...` and `ssh host cmd`.
 
+# ── History ──────────────────────────────────────────────────────
 HISTCONTROL=ignoreboth
 shopt -s histappend
-HISTSIZE=1000
-HISTFILESIZE=2000
+HISTSIZE=50000
+HISTFILESIZE=50000
+HISTTIMEFORMAT='%F %T  '
 shopt -s checkwinsize
+shopt -s globstar 2>/dev/null
 
 if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
     debian_chroot=$(cat /etc/debian_chroot)
 fi
 
+# ── Prompt ───────────────────────────────────────────────────────
 case "$TERM" in
     xterm-color|*-256color) color_prompt=yes;;
 esac
@@ -37,6 +45,7 @@ xterm*|rxvt*)
     ;;
 esac
 
+# ── Colours for coreutils (overridden by eza aliases when installed) ──
 if [ -x /usr/bin/dircolors ]; then
     test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
     alias ls='ls --color=auto'
@@ -44,9 +53,6 @@ if [ -x /usr/bin/dircolors ]; then
     alias fgrep='fgrep --color=auto'
     alias egrep='egrep --color=auto'
 fi
-
-alias ll='ls -alF'
-alias la='ls -A'
 alias l='ls -CF'
 
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
@@ -55,6 +61,7 @@ if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases
 fi
 
+# ── Completion ───────────────────────────────────────────────────
 if ! shopt -oq posix; then
   if [ -f /usr/share/bash-completion/bash_completion ]; then
     . /usr/share/bash-completion/bash_completion
@@ -62,29 +69,14 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
+[ -r "$HOME/.grok/completions/bash/grok.bash" ] && . "$HOME/.grok/completions/bash/grok.bash"
 
-. "$HOME/.local/bin/env"
-
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-
-. "$HOME/.cargo/env"
-
-export PATH="$HOME/.grok/bin:$PATH"
-[[ -r "$HOME/.grok/completions/bash/grok.bash" ]] && . "$HOME/.grok/completions/bash/grok.bash"
-[[ -d "$HOME/.duckdb/cli/latest" ]] && export PATH="$HOME/.duckdb/cli/latest:$PATH"
-
-# ── Modern CLI tool aliases ──────────────────────────────────────
-alias ls="eza --icons --group-directories-first"
-alias ll="eza -lah --icons --group-directories-first --git"
-alias lt="eza --tree --level=2 --icons"
-alias cat="bat --paging=never"
-alias catp="bat"
-alias find="fd"
-alias grep="rg"
-
-# OS-specific setup (WSL, apt-compat, conda) — stowed from bash-linux/
-if [[ -d "$HOME/.bashrc.d" ]]; then
+# ── OS-specific setup (WSL, apt-compat, conda) — stowed from bash-linux/ ──
+# Runs before common.sh so PATH entries added here (e.g. /opt/nvim) are visible
+# to the tool guards in common.sh.
+if [ -d "$HOME/.bashrc.d" ]; then
   for f in "$HOME/.bashrc.d"/*.sh; do [ -f "$f" ] && . "$f"; done
 fi
+
+# ── Shared cross-shell config (aliases, fzf, zoxide, nvm, EDITOR) ─
+[ -f "$HOME/.config/shell/common.sh" ] && . "$HOME/.config/shell/common.sh"

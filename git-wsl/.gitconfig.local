@@ -1,0 +1,6 @@
+# WSL git settings (included from ~/.gitconfig)
+#
+# Reuse Git Credential Manager from Git for Windows so HTTPS remotes share the
+# Windows credential store. The path must be quoted because of the spaces.
+[credential]
+	helper = "/mnt/c/Program\\ Files/Git/mingw64/bin/git-credential-manager.exe"

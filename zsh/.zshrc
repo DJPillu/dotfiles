@@ -28,25 +28,17 @@ plugins=(
   rust
   sudo
   extract
-  z
   colored-man-pages
   fzf
 )
 
-source $ZSH/oh-my-zsh.sh
+if [[ -f "$ZSH/oh-my-zsh.sh" ]]; then
+  source "$ZSH/oh-my-zsh.sh"
+else
+  autoload -Uz compinit && compinit
+fi
 
 export TERM=xterm-256color
-export EDITOR=vim
-
-alias python=python3
-alias pip=pip3
-
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-
-. "$HOME/.local/bin/env"
-. "$HOME/.cargo/env"
 
 # ── History settings ──────────────────────────────────────────────
 HISTSIZE=50000
@@ -58,34 +50,11 @@ setopt SHARE_HISTORY
 setopt APPEND_HISTORY
 setopt INC_APPEND_HISTORY
 setopt HIST_REDUCE_BLANKS
+setopt EXTENDED_HISTORY          # timestamps and duration
+setopt INC_APPEND_HISTORY_TIME   # append immediately with duration tracked
+export REPORTTIME=3              # print timing for commands > 3s
 
-# ── Modern CLI tool aliases ──────────────────────────────────────
-alias ls="eza --icons --group-directories-first"
-alias ll="eza -lah --icons --group-directories-first --git"
-alias lt="eza --tree --level=2 --icons"
-alias cat="bat --paging=never"
-alias catp="bat"
-alias find="fd"
-alias grep="rg"
-
-# ── fzf configuration ───────────────────────────────────────────
-export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
-export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'
-source <(fzf --zsh)
-
-# ── zoxide (smarter cd) ─────────────────────────────────────────
-eval "$(zoxide init zsh --cmd cd)"
+# ── Shared cross-shell config (aliases, fzf, zoxide, nvm, EDITOR, PATH) ─
+[[ -f "$HOME/.config/shell/common.sh" ]] && source "$HOME/.config/shell/common.sh"
 
 [[ ! -f "${POWERLEVEL9K_CONFIG_FILE}" ]] || source "${POWERLEVEL9K_CONFIG_FILE}"
-
-export PATH="$HOME/.grok/bin:$PATH"
-export PATH="/Users/rujul/.duckdb/cli/latest":$PATH
-export REPORTTIME=3
-
-# Enable extended history tracking (records timestamps and duration)
-setopt EXTENDED_HISTORY
-
-# Append commands immediately to history with duration tracked
-setopt INC_APPEND_HISTORY_TIME
-

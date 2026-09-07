@@ -1,3 +1,6 @@
+# Skip entirely when miniforge is not installed (install.sh extras module).
+[ -x "$HOME/miniforge3/bin/conda" ] || return 0
+
 # >>> conda initialize >>>
 __conda_setup="$("$HOME/miniforge3/bin/conda" 'shell.bash' 'hook' 2> /dev/null)"
 if [ $? -eq 0 ]; then

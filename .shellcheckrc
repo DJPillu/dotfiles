@@ -1,0 +1,8 @@
+# Project-wide ShellCheck settings (used locally and in CI)
+shell=bash
+# Tilde in human-readable output strings is intentional
+disable=SC2088
+# Dynamic sources (rc.d loops, fzf --bash, ~/.bash_aliases) cannot be followed
+disable=SC1090,SC1091
+# Aliases intentionally expand at definition time (fd/fdfind, mamba)
+disable=SC2139

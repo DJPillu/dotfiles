@@ -2,12 +2,42 @@
     name = Rujul Arora
     email = rujularoracs@gmail.com
 
-#[includeIf "gitdir:~/xAI/"]
-#    path = ~/.gitconfig-xai
 [includeIf "gitdir/i:~/xAI/"]
     path = ~/.gitconfig-xai
 
+# OS-specific settings (credential helper etc.), stowed from git-macos/ or git-linux/
+[include]
+    path = ~/.gitconfig.local
+
 [init]
 	defaultBranch = main
+
 [core]
 	pager = delta
+	autocrlf = input
+
+[interactive]
+	diffFilter = delta --color-only
+
+[delta]
+	navigate = true
+	line-numbers = true
+	side-by-side = false
+
+[merge]
+	conflictstyle = zdiff3
+
+[diff]
+	colorMoved = default
+
+[pull]
+	rebase = false
+
+[push]
+	autoSetupRemote = true
+
+[fetch]
+	prune = true
+
+[rerere]
+	enabled = true
