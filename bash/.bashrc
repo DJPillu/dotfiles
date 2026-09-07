@@ -1,5 +1,3 @@
-cd ~
-
 # ~/.bashrc: executed by bash(1) for non-login shells.
 
 HISTCONTROL=ignoreboth
@@ -74,6 +72,8 @@ export NVM_DIR="$HOME/.nvm"
 . "$HOME/.cargo/env"
 
 export PATH="$HOME/.grok/bin:$PATH"
+[[ -r "$HOME/.grok/completions/bash/grok.bash" ]] && . "$HOME/.grok/completions/bash/grok.bash"
+[[ -d "$HOME/.duckdb/cli/latest" ]] && export PATH="$HOME/.duckdb/cli/latest:$PATH"
 
 # ── Modern CLI tool aliases ──────────────────────────────────────
 alias ls="eza --icons --group-directories-first"
