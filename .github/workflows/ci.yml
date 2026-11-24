@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Weekly, so upstream breakage (renamed release assets, runner image
+  # changes) shows up before a machine's scheduled update hits it.
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
 
 jobs:
   shellcheck:
@@ -20,7 +25,16 @@ jobs:
             bash/.bashrc bash/.bash_profile \
             bash-linux/.bashrc.d/*.sh \
             shell/.config/shell/common.sh \
-            local/.local/bin/tmux-copy
+            local/.local/bin/tmux-copy \
+            local/.local/bin/dotfiles-sync
+
+  downloads:
+    name: installer download sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Every URL install.sh fetches still resolves
+        run: ./install.sh --check-urls
 
   smoke:
     name: stow + doctor (${{ matrix.os }})
@@ -91,6 +105,20 @@ jobs:
           test "$(echo "$out" | grep -c 'already in sync')" -eq 3
           test "$(git config -f "$WIN_HOME/.gitconfig.local" core.autocrlf)" = true
           test "$(git config -f "$WIN_HOME/.gitconfig" user.email)" = rujularoracs@gmail.com
+
+      - name: Schedule module (runners have no user systemd / GUI launchd; must not fail)
+        run: ./install.sh --only schedule
+
+      - name: LaunchAgent plist is valid (macOS)
+        if: runner.os == 'macOS'
+        run: plutil -lint ~/Library/LaunchAgents/com.djpillu.dotfiles-sync.plist
+
+      # /bin/bash is 3.2 on macOS, which is what launchd uses.
+      - name: dotfiles-sync runs end to end (align only)
+        run: |
+          /bin/bash "$HOME/.local/bin/dotfiles-sync" --no-update
+          "$HOME/.local/bin/dotfiles-sync" --status
+          test -s "$HOME/.local/state/dotfiles/status"
 
       - name: Doctor (informational — tools are not installed on runners)
         continue-on-error: true
