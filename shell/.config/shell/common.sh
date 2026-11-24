@@ -8,7 +8,9 @@ if [ -n "${ZSH_VERSION:-}" ]; then _shell=zsh; else _shell=bash; fi
 [ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
 [ -f "$HOME/.cargo/env" ]     && . "$HOME/.cargo/env"
 [ -d "$HOME/.grok/bin" ]      && export PATH="$HOME/.grok/bin:$PATH"
-[ -d "$HOME/.duckdb/cli/latest" ] && export PATH="$HOME/.duckdb/cli/latest:$PATH"
+# Appended: the official duckdb installer's copy is only a fallback, so the
+# managed one (~/.local/bin on Linux, Homebrew on macOS) wins.
+[ -d "$HOME/.duckdb/cli/latest" ] && export PATH="$PATH:$HOME/.duckdb/cli/latest"
 
 # ── Editor ───────────────────────────────────────────────────────
 if command -v nvim >/dev/null 2>&1; then

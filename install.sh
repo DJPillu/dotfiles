@@ -383,9 +383,11 @@ if enabled extras; then
             if [[ -n "$DDB_ARCH" ]]; then
                 info "Installing duckdb CLI..."
                 DDB_TMP="$(mktemp -d)"
-                curl -fsSL -o "$DDB_TMP/duckdb.zip" "https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-$DDB_ARCH.zip"
-                unzip -qo "$DDB_TMP/duckdb.zip" -d "$HOME/.local/bin"
-                chmod +x "$HOME/.local/bin/duckdb"
+                curl -fsSL -o "$DDB_TMP/duckdb.tar.gz" "https://github.com/duckdb/duckdb/releases/latest/download/duckdb-cli-linux-$DDB_ARCH.tar.gz"
+                tar -xzf "$DDB_TMP/duckdb.tar.gz" -C "$DDB_TMP" duckdb
+                # install(1) replaces a symlink left by the official installer
+                # (-> ~/.duckdb/cli/...) instead of writing through it.
+                install -m 755 "$DDB_TMP/duckdb" "$HOME/.local/bin/duckdb"
                 rm -rf "$DDB_TMP"
                 ok "duckdb $("$HOME/.local/bin/duckdb" --version) installed"
             else

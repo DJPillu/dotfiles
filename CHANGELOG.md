@@ -57,6 +57,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 - WSL git credential helper pointed at `Git/mingw64/bin/git-credential-manager.exe`, which current Git for Windows no longer ships (now `Git/ucrt64/bin/`)
 - `extras` WSL hint and README suggested `winget install Microsoft.CascadiaCode`, a package ID that doesn't exist
+- `extras` on Linux: duckdb 2.x publishes `duckdb-cli-linux-<arch>.tar.gz` (the old `duckdb_cli-linux-<arch>.zip` 404s); a symlink left by the official installer is replaced rather than written through
+- `common.sh`: `~/.duckdb/cli/latest` is appended to `PATH` instead of prepended, so an old official-installer duckdb no longer shadows the managed one
 - Shell start errors on a fresh machine: `~/.cargo/env`, `~/.local/bin/env`, conda, fzf and zoxide are all guarded
 - Hardcoded `/Users/rujul/.duckdb` path in `.zshrc`
 - `EDITOR` was `vim` in zsh and unset in bash; now `nvim` on both
