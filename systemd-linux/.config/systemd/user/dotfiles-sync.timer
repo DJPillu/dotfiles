@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily dotfiles-sync
+
+[Timer]
+OnCalendar=*-*-* 10:00:00
+RandomizedDelaySec=15min
+# WSL is often not running at 10:00; this runs the missed sync at next start.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

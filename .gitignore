@@ -16,6 +16,7 @@ ssh/.ssh/*.pem
 local/.local/bin/*
 !local/.local/bin/env
 !local/.local/bin/tmux-copy
+!local/.local/bin/dotfiles-sync
 
 # TPM-installed tmux plugins (legacy location; now live in ~/.config/tmux/plugins)
 tmux/.config/tmux/plugins/

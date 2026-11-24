@@ -45,7 +45,8 @@ OS-specific shell configs use a `.d` source directory pattern.
 ├── git-wsl/        .gitconfig.local (Git Credential Manager from Git for Windows)
 ├── git-linux/      .gitconfig.local (cache credential helper)
 ├── git-windows/    .gitconfig.local (Windows host: CRLF, pager fallback) — copied by the windows module, not stowed
-├── local/          .local/bin/ (env, tmux-copy)
+├── systemd-linux/  .config/systemd/user/dotfiles-sync.{service,timer} — Linux/WSL only
+├── local/          .local/bin/ (env, tmux-copy, dotfiles-sync)
 ├── nvim/           .config/nvim/ (LazyVim)
 ├── tmux/           .config/tmux/tmux.conf
 ├── ghostty/        .config/ghostty/ (shaders as submodule)
@@ -69,6 +70,7 @@ The installer is modular — run it interactively to pick modules, or use CLI fl
 ./install.sh --only packages,stow
 ./install.sh --exclude omz,tpm
 ./install.sh --check             # run only the doctor
+./install.sh --check-urls        # check every download source still resolves
 ./install.sh --only windows      # WSL: re-sync the Windows git config
 ./install.sh --all --update      # upgrade brew/apt, nvim, omz, plugins, tpm, nvm
 ```
@@ -83,9 +85,39 @@ The installer is modular — run it interactively to pick modules, or use CLI fl
 | tpm        | Tmux Plugin Manager, then installs the plugins listed in `tmux.conf` |
 | nvm        | Node Version Manager (latest release, no rc edits) |
 | windows    | WSL only: copies the git config to the Windows host and backs up whatever it replaces (see [Windows side](#windows-side-wsl)). No-op elsewhere |
+| schedule   | Runs `dotfiles-sync` daily: a systemd user timer on Linux/WSL, a launchd agent on macOS (see [Staying in sync](#staying-in-sync)) |
 | doctor     | Verifies tool paths and versions (flags `nvim` < 0.10 or the apt build shadowing `/opt`), stow symlinks, `~/.ssh` permissions, and that the repo is clean. On WSL it also checks the Git Credential Manager path and that the Windows git config matches the repo |
 
 `doctor` runs at the end of `--all` and exits non-zero on problems.
+
+## Staying in sync
+
+`dotfiles-sync` (in `~/.local/bin`, installed by the `schedule` module as part of `--all`) keeps each machine aligned with the repo:
+
+- **Every day at 10:00** in the machine's time zone (WSL normally runs in UTC, so 15:30 IST), give or take 15 minutes:
+  - Fast-forwards `~/.dotfiles`, which never touches local edits.
+  - Re-stows, re-syncs the Windows git config (WSL), and runs `doctor`.
+- **Every 7 days:** also runs `install.sh --update` for the tools that need no sudo: Oh My Zsh / Powerlevel10k / plugins, tmux plugins, nvm, rustup, conda, uv and duckdb, plus Homebrew on macOS.
+- **Never:** committing, pushing, or anything that needs sudo. Uncommitted or unpushed changes, a diverged branch, waiting apt upgrades and a newer Neovim are reported instead. Ubuntu's `unattended-upgrades` still applies apt security updates on its own.
+
+If the machine (or WSL) was off at 10:00, the run happens at the next start: systemd catches it up via `Persistent=true`, and launchd runs it after wake.
+
+When the last run needs attention, or no run has happened for 3 days, new terminals show one line pointing at the details:
+
+```bash
+dotfiles-sync --status      # what needs you, plus the log path (~/.local/state/dotfiles/sync.log)
+dotfiles-sync               # run now (also updates tools if 7+ days since the last update)
+dotfiles-sync --update      # run now and update tools
+```
+
+Pause or remove the schedule:
+
+```bash
+systemctl --user disable --now dotfiles-sync.timer                 # Linux / WSL
+launchctl bootout gui/$(id -u)/com.djpillu.dotfiles-sync           # macOS
+```
+
+`doctor` reports whether the schedule is active and when it last ran.
 
 ## OS-Specific Config (.d Pattern)
 
@@ -165,11 +197,14 @@ git add ghostty/.config/ghostty/shaders && git commit -m "chore: update ghostty 
 
 ## Development
 
-`shellcheck` runs on every push (see `.github/workflows/ci.yml`) along with a
-smoke run of `./install.sh --only stow,doctor` on Ubuntu and macOS, a git
-identity routing check, and the `windows` module against a fake
-`%USERPROFILE%` (`WIN_HOME=<dir>`). Locally:
+CI (`.github/workflows/ci.yml`) runs on every push and weekly on Mondays:
+
+- `shellcheck`.
+- A smoke run on Ubuntu and macOS: stow, shell startup, git identity routing, the `windows` module against a fake `%USERPROFILE%` (`WIN_HOME=<dir>`), the `schedule` module, and `dotfiles-sync` under `/bin/bash` (3.2 on macOS).
+- `./install.sh --check-urls`, which checks every download source the modules use. The weekly run catches renamed release assets before a machine's scheduled update does.
+
+GitHub disables scheduled workflows after 60 days without repository activity; it emails a warning first. Locally:
 
 ```bash
-shellcheck install.sh bootstrap.sh bash/.bashrc bash-linux/.bashrc.d/*.sh shell/.config/shell/common.sh
+shellcheck install.sh bootstrap.sh bash/.bashrc bash-linux/.bashrc.d/*.sh shell/.config/shell/common.sh local/.local/bin/dotfiles-sync
 ```

@@ -85,4 +85,26 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
 
+# ── Scheduled dotfiles-sync: one line when it needs you ──────────
+case "$-" in
+  *i*)
+    _ds_file="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/status"
+    _ds_msg=""
+    if [ -r "$_ds_file" ]; then
+      read -r _ds_state _ds_when <"$_ds_file"
+      if [ "$_ds_state" = attention ]; then
+        _ds_msg="dotfiles: the $_ds_when sync needs attention: dotfiles-sync --status"
+      elif [ -n "$(command find "$_ds_file" -mtime +2 2>/dev/null)" ]; then
+        _ds_msg="dotfiles: no sync since $_ds_when; check: ~/.dotfiles/install.sh --check"
+      fi
+    fi
+    if [ -n "$_ds_msg" ]; then
+      # Powerlevel10k's instant prompt captures any output until the first
+      # prompt (even from precmd hooks) and warns about it; release it first.
+      if [ "$_shell" = zsh ] && type p10k >/dev/null 2>&1; then p10k clear-instant-prompt; fi
+      printf '\033[33m%s\033[0m\n' "$_ds_msg"
+    fi
+    unset _ds_file _ds_state _ds_when _ds_msg ;;
+esac
+
 unset _shell _fd

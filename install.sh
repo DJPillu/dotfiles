@@ -118,8 +118,45 @@ version_ge() {
     [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" == "$2" ]]
 }
 
+# ── Download sources ─────────────────────────────────────────────
+# Every module fetches through these, so --check-urls (weekly in CI) tests
+# exactly what a real install would download.
+URL_HOMEBREW="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
+URL_OMZ="https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"
+URL_RUSTUP="https://sh.rustup.rs"
+URL_UV="https://astral.sh/uv/install.sh"
+URL_P10K="https://github.com/romkatv/powerlevel10k.git"
+URL_TPM="https://github.com/tmux-plugins/tpm"
+OMZ_PLUGIN_REPOS=(zsh-users/zsh-autosuggestions zsh-users/zsh-syntax-highlighting zsh-users/zsh-completions)
+nvim_url()      { echo "https://github.com/neovim/neovim/releases/latest/download/$1.tar.gz"; }
+miniforge_url() { echo "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$1-$2.sh"; }
+duckdb_url()    { echo "https://github.com/duckdb/duckdb/releases/latest/download/duckdb-cli-linux-$1.tar.gz"; }
+nvm_url()       { echo "https://raw.githubusercontent.com/nvm-sh/nvm/$1/install.sh"; }
+
+check_urls() {
+    local fails=0 u a r
+    probe() {
+        if curl -fsSL --connect-timeout 10 --max-time 30 --retry 2 -r 0-0 -o /dev/null "$1"; then ok "$1"
+        else err "$1"; fails=$((fails+1)); fi
+    }
+    probe_git() {
+        if GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30 git ls-remote --exit-code -q "$1" HEAD >/dev/null 2>&1; then ok "$1"
+        else err "$1"; fails=$((fails+1)); fi
+    }
+    for u in "$URL_HOMEBREW" "$URL_OMZ" "$URL_RUSTUP" "$URL_UV"; do probe "$u"; done
+    for a in nvim-linux-x86_64 nvim-linux-arm64; do probe "$(nvim_url "$a")"; done
+    for a in Linux-x86_64 Linux-aarch64 Darwin-x86_64 Darwin-arm64; do probe "$(miniforge_url "${a%-*}" "${a#*-}")"; done
+    for a in amd64 arm64; do probe "$(duckdb_url "$a")"; done
+    probe "$(nvm_url "$(github_latest_tag nvm-sh/nvm "$NVM_FALLBACK_VERSION")")"
+    for r in "${OMZ_PLUGIN_REPOS[@]}"; do probe_git "https://github.com/$r.git"; done
+    probe_git "$URL_P10K"
+    probe_git "$URL_TPM"
+    if (( fails > 0 )); then err "$fails download source(s) unreachable"; return 1; fi
+    ok "All download sources reachable"
+}
+
 # ── Available modules ────────────────────────────────────────────
-ALL_MODULES=(submodules packages extras omz stow tpm nvm windows doctor)
+ALL_MODULES=(submodules packages extras omz stow tpm nvm windows schedule doctor)
 
 valid_module() {
     local mod="$1"
@@ -130,6 +167,7 @@ valid_module() {
 # ── CLI argument parsing ─────────────────────────────────────────
 INTERACTIVE=true
 UPDATE_MODE=false
+CHECK_URLS=false
 # Enabled set kept as a space-delimited string: stock macOS bash is 3.2 and
 # has no associative arrays.
 ENABLED_SET=" ${ALL_MODULES[*]} "
@@ -148,6 +186,7 @@ Options:
   --only mod1,mod2      Run only the listed modules
   --exclude mod1,mod2   Run all modules except the listed ones
   --check               Alias for --only doctor (verify the setup)
+  --check-urls          Check that every download source still resolves
   -u, --update          Update existing installs (brew/apt upgrade, nvim,
                         git pull omz/p10k/plugins/tpm, reinstall nvm)
   -h, --help            Show this help message
@@ -162,6 +201,8 @@ Modules:
   nvm         Node Version Manager
   windows     WSL only: copy the git config to the Windows host (backs up
               what it replaces)
+  schedule    Daily dotfiles-sync: systemd user timer (Linux/WSL) or
+              launchd agent (macOS)
   doctor      Verify tools, versions and symlinks
 EOF
     exit 0
@@ -190,11 +231,16 @@ while [[ $# -gt 0 ]]; do
                 disable_mod "$m"
             done
             shift 2 ;;
+        --check-urls) CHECK_URLS=true; INTERACTIVE=false; shift ;;
         -u|--update) UPDATE_MODE=true; shift ;;
         -h|--help) usage ;;
         *) err "Unknown option: $1"; usage ;;
     esac
 done
+
+if $CHECK_URLS; then
+    if check_urls; then exit 0; else exit 1; fi
+fi
 
 # ── Interactive menu (reads from the terminal even when piped) ───
 if $INTERACTIVE; then
@@ -263,7 +309,7 @@ install_nvim_linux() {
     else
         info "Installing Neovim ${latest:-latest} ($name) to /opt..."
         tmp="$(mktemp -d)"
-        curl -fsSL -o "$tmp/nvim.tar.gz" "https://github.com/neovim/neovim/releases/latest/download/$name.tar.gz"
+        curl -fsSL -o "$tmp/nvim.tar.gz" "$(nvim_url "$name")"
         $SUDO rm -rf "/opt/$name"
         $SUDO tar -C /opt -xzf "$tmp/nvim.tar.gz"
         $SUDO ln -sfn "/opt/$name" "$NVIM_OPT_LINK"
@@ -294,7 +340,7 @@ if enabled packages; then
     if $IS_MAC; then
         if ! have brew; then
             info "Installing Homebrew..."
-            NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL "$URL_HOMEBREW")"
         fi
         if [[ -x /opt/homebrew/bin/brew ]]; then eval "$(/opt/homebrew/bin/brew shellenv)"
         elif [[ -x /usr/local/bin/brew ]]; then eval "$(/usr/local/bin/brew shellenv)"; fi
@@ -339,7 +385,7 @@ if enabled extras; then
         ok "rustup already installed"
     else
         info "Installing rustup (no rc edits)..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --quiet
+        curl --proto '=https' --tlsv1.2 -sSf "$URL_RUSTUP" | sh -s -- -y --no-modify-path --quiet
         ok "rustup installed"
     fi
 
@@ -350,7 +396,7 @@ if enabled extras; then
     else
         info "Installing miniforge to ~/miniforge3 (no conda init)..."
         MF_TMP="$(mktemp -d)"
-        curl -fsSL -o "$MF_TMP/miniforge.sh" "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+        curl -fsSL -o "$MF_TMP/miniforge.sh" "$(miniforge_url "$(uname)" "$(uname -m)")"
         bash "$MF_TMP/miniforge.sh" -b -p "$HOME/miniforge3"
         rm -rf "$MF_TMP"
         ok "miniforge installed"
@@ -364,16 +410,22 @@ if enabled extras; then
     else
         mkdir -p "$HOME/.local/bin"
         # uv
-        if [[ -x "$HOME/.local/bin/uv" ]] && ! $UPDATE_MODE; then
+        UV_CURRENT="$("$HOME/.local/bin/uv" --version 2>/dev/null | awk '{print $2}' || true)"
+        if [[ -n "$UV_CURRENT" ]] && ! $UPDATE_MODE; then
             ok "uv already installed"
+        elif [[ -n "$UV_CURRENT" && "$UV_CURRENT" == "$(github_latest_tag astral-sh/uv "")" ]]; then
+            ok "uv $UV_CURRENT is already the latest"
         else
             info "Installing uv (no rc edits)..."
-            curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 UV_INSTALL_DIR="$HOME/.local/bin" sh
+            curl -LsSf "$URL_UV" | env UV_NO_MODIFY_PATH=1 UV_INSTALL_DIR="$HOME/.local/bin" sh
             ok "uv installed"
         fi
         # duckdb CLI -> ~/.local/bin (direct release download; installer script edits rc files)
-        if [[ -x "$HOME/.local/bin/duckdb" ]] && ! $UPDATE_MODE; then
+        DDB_CURRENT="$("$HOME/.local/bin/duckdb" --version 2>/dev/null | awk '{print $1}' || true)"
+        if [[ -n "$DDB_CURRENT" ]] && ! $UPDATE_MODE; then
             ok "duckdb already installed"
+        elif [[ -n "$DDB_CURRENT" && "$DDB_CURRENT" == "$(github_latest_tag duckdb/duckdb "")" ]]; then
+            ok "duckdb $DDB_CURRENT is already the latest"
         else
             case "$ARCH" in
                 x86_64) DDB_ARCH=amd64 ;;
@@ -383,7 +435,7 @@ if enabled extras; then
             if [[ -n "$DDB_ARCH" ]]; then
                 info "Installing duckdb CLI..."
                 DDB_TMP="$(mktemp -d)"
-                curl -fsSL -o "$DDB_TMP/duckdb.tar.gz" "https://github.com/duckdb/duckdb/releases/latest/download/duckdb-cli-linux-$DDB_ARCH.tar.gz"
+                curl -fsSL -o "$DDB_TMP/duckdb.tar.gz" "$(duckdb_url "$DDB_ARCH")"
                 tar -xzf "$DDB_TMP/duckdb.tar.gz" -C "$DDB_TMP" duckdb
                 # install(1) replaces a symlink left by the official installer
                 # (-> ~/.duckdb/cli/...) instead of writing through it.
@@ -412,14 +464,14 @@ if enabled omz; then
     else
         if [[ ! -d "$OMZ_DIR" ]]; then
             info "Installing Oh My Zsh..."
-            ZSH="$OMZ_DIR" sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended --keep-zshrc
+            ZSH="$OMZ_DIR" sh -c "$(curl -fsSL "$URL_OMZ")" "" --unattended --keep-zshrc
         elif $UPDATE_MODE; then
             git_pull "$OMZ_DIR" "Oh My Zsh"
         else
             ok "Oh My Zsh already installed"
         fi
 
-        for repo in zsh-users/zsh-autosuggestions zsh-users/zsh-syntax-highlighting zsh-users/zsh-completions; do
+        for repo in "${OMZ_PLUGIN_REPOS[@]}"; do
             name="${repo##*/}"
             dest="$OMZ_CUSTOM/plugins/$name"
             if [[ ! -d "$dest" ]]; then
@@ -432,7 +484,7 @@ if enabled omz; then
         P10K_DIR="$OMZ_CUSTOM/themes/powerlevel10k"
         if [[ ! -d "$P10K_DIR" ]]; then
             info "Cloning Powerlevel10k..."
-            git clone --depth=1 --quiet https://github.com/romkatv/powerlevel10k.git "$P10K_DIR"
+            git clone --depth=1 --quiet "$URL_P10K" "$P10K_DIR"
         elif $UPDATE_MODE; then git_pull "$P10K_DIR" "Powerlevel10k"
         else ok "Powerlevel10k already installed"; fi
     fi
@@ -485,8 +537,8 @@ if enabled stow; then
 
     SHARED_PACKAGES=(shell zsh bash git nvim tmux ghostty alacritty ssh conda local)
     if $IS_MAC; then OS_PACKAGES=(zsh-macos git-macos)
-    elif $IS_WSL; then OS_PACKAGES=(bash-linux git-wsl)
-    else OS_PACKAGES=(bash-linux git-linux); fi
+    elif $IS_WSL; then OS_PACKAGES=(bash-linux git-wsl systemd-linux)
+    else OS_PACKAGES=(bash-linux git-linux systemd-linux); fi
 
     # Legacy: tmux plugins used to live inside the (then folded) repo dir.
     # stow ignores .gitignore, so they must be moved out *before* stowing or
@@ -543,7 +595,7 @@ if enabled tpm; then
     TPM_DIR="$HOME/.config/tmux/plugins/tpm"
     if [[ ! -d "$TPM_DIR" ]]; then
         info "Cloning TPM..."
-        git clone --depth=1 --quiet https://github.com/tmux-plugins/tpm "$TPM_DIR"
+        git clone --depth=1 --quiet "$URL_TPM" "$TPM_DIR"
     elif $UPDATE_MODE; then
         git_pull "$TPM_DIR" "TPM"
     else
@@ -564,7 +616,7 @@ if enabled nvm; then
     NVM_VERSION="$(github_latest_tag nvm-sh/nvm "$NVM_FALLBACK_VERSION")"
     if [[ ! -d "$HOME/.nvm" ]] || $UPDATE_MODE; then
         info "Installing NVM ${NVM_VERSION} (no rc edits)..."
-        PROFILE=/dev/null bash -c "$(curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh")"
+        PROFILE=/dev/null bash -c "$(curl -fsSL "$(nvm_url "$NVM_VERSION")")"
         ok "NVM ${NVM_VERSION} installed"
     else
         ok "NVM already installed"
@@ -588,6 +640,13 @@ win_home() {
     [[ -n "$p" ]] && wslpath -u "$p"
 }
 
+# Asks Windows itself: services started by systemd don't get WSL's appended
+# Windows PATH, and the answer must match between scheduled and shell runs.
+win_has_delta() {
+    [[ -x /mnt/c/Windows/System32/where.exe ]] || return 1
+    (cd /mnt/c && /mnt/c/Windows/System32/where.exe /q delta.exe) 2>/dev/null
+}
+
 # Content the windows module writes for each name in WIN_FILES.
 win_render() {
     printf '%s\n' "$WIN_HEADER"
@@ -597,7 +656,7 @@ win_render() {
             cat "$DOTFILES/git-windows/.gitconfig.local"
             # The shared .gitconfig pages through delta; without delta.exe,
             # Windows git would print an error on every log/diff.
-            if ! have delta.exe; then
+            if ! win_has_delta; then
                 printf '\n# delta.exe is not on the Windows PATH: plain pager instead.\n[core]\n\tpager = less\n[interactive]\n\tdiffFilter = cat\n'
             fi ;;
     esac
@@ -634,7 +693,80 @@ if enabled windows; then
     else
         info "Syncing git config to $WIN_DIR"
         for name in "${WIN_FILES[@]}"; do win_sync_file "$name" "$WIN_DIR"; done
-        have delta.exe || info "Windows git pages with less until delta is installed: winget install --id dandavison.delta -e"
+        win_has_delta || info "Windows git pages with less until delta is installed: winget install --id dandavison.delta -e"
+    fi
+fi
+
+# ── Scheduled sync ───────────────────────────────────────────────
+SYNC_BIN="$HOME/.local/bin/dotfiles-sync"
+SYNC_STATUS="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/status"
+SYNC_LABEL="com.djpillu.dotfiles-sync"
+SYNC_AGENT="$HOME/Library/LaunchAgents/$SYNC_LABEL.plist"
+
+# launchd runs a missed calendar job after wake. The Linux timer lives in
+# systemd-linux/ (stowed) and catches up via Persistent=true.
+launch_agent_plist() {
+    cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$SYNC_LABEL</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$SYNC_BIN</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>10</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>Nice</key>
+    <integer>10</integer>
+</dict>
+</plist>
+EOF
+}
+
+sync_timer_next() {
+    systemctl --user show dotfiles-sync.timer -p NextElapseUSecRealtime --value 2>/dev/null || true
+}
+
+# ── Module: schedule ─────────────────────────────────────────────
+if enabled schedule; then
+    section "schedule"
+    if [[ ! -x "$SYNC_BIN" ]]; then
+        warn "$SYNC_BIN missing; run the stow module first"
+    elif $IS_MAC; then
+        mkdir -p "$(dirname "$SYNC_AGENT")"
+        if [[ -f "$SYNC_AGENT" ]] && cmp -s <(launch_agent_plist) "$SYNC_AGENT" \
+           && launchctl print "gui/$(id -u)/$SYNC_LABEL" &>/dev/null; then
+            ok "launchd agent already loaded (daily at 10:00)"
+        else
+            launch_agent_plist >"$SYNC_AGENT"
+            plutil -lint -s "$SYNC_AGENT"
+            launchctl bootout "gui/$(id -u)/$SYNC_LABEL" &>/dev/null || true
+            if launchctl bootstrap "gui/$(id -u)" "$SYNC_AGENT"; then ok "launchd agent loaded (daily at 10:00)"
+            else warn "Could not load $SYNC_AGENT now (no GUI session?); launchd loads it at next login"; fi
+        fi
+    elif ! systemctl --user show-environment &>/dev/null; then
+        warn "No systemd user session. On WSL set [boot] systemd=true in /etc/wsl.conf, restart WSL, then: ./install.sh --only schedule"
+    elif [[ ! -e "$HOME/.config/systemd/user/dotfiles-sync.timer" ]]; then
+        warn "dotfiles-sync.timer is not stowed; run the stow module first"
+    else
+        systemctl --user daemon-reload
+        systemctl --user enable --now dotfiles-sync.timer
+        ok "systemd timer enabled; next run: $(sync_timer_next)"
+        if [[ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null || true)" != yes ]]; then
+            warn "Lingering is off, so the timer only fires while you are logged in: sudo loginctl enable-linger $(id -un)"
+        fi
     fi
 fi
 
@@ -752,6 +884,28 @@ if enabled doctor; then
             done
         fi
         dr_warn "terminal font" "set Windows Terminal font to a Nerd Font (winget install DEVCOM.JetBrainsMonoNerdFont)"
+    fi
+
+    echo "Schedule:"
+    if $IS_MAC; then
+        if launchctl print "gui/$(id -u)/$SYNC_LABEL" &>/dev/null; then dr_ok "dotfiles-sync" "launchd agent loaded (daily at 10:00)"
+        else dr_warn "dotfiles-sync" "launchd agent not loaded (schedule module)"; fi
+    elif systemctl --user is-enabled dotfiles-sync.timer &>/dev/null; then
+        dr_ok "dotfiles-sync" "timer enabled; next run: $(sync_timer_next)"
+    else
+        dr_warn "dotfiles-sync" "timer not enabled (schedule module)"
+    fi
+    if [[ -f "$SYNC_STATUS" ]]; then
+        read -r SYNC_STATE SYNC_WHEN <"$SYNC_STATUS" || true
+        if [[ -n "$(find "$SYNC_STATUS" -mtime +2 2>/dev/null)" ]]; then
+            dr_warn "last sync" "$SYNC_WHEN, over 3 days ago; is the schedule running?"
+        elif [[ "$SYNC_STATE" == ok ]]; then
+            dr_ok "last sync" "$SYNC_WHEN"
+        else
+            dr_warn "last sync" "$SYNC_WHEN needs attention: dotfiles-sync --status"
+        fi
+    else
+        dr_warn "last sync" "never ran (run dotfiles-sync, or wait for the schedule)"
     fi
 
     echo ""

@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# Keep this machine aligned with the dotfiles repo. Runs daily from a systemd
+# user timer (Linux/WSL) or a launchd agent (macOS), both installed by
+# `install.sh --only schedule`. Safe to run by hand at any time.
+#
+# Align (every run): fast-forward the repo (never over local edits), restow,
+# sync the Windows git config (WSL), run doctor.
+# Update (every 7 days, or --update): install.sh --update for tools that need
+# no sudo, plus Homebrew on macOS. Commits, pushes and sudo steps are reported
+# in the status for you to do, never done here.
+#
+# Must stay bash 3.2 compatible: launchd runs it with macOS's /bin/bash.
+set -uo pipefail
+
+DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles"
+STATUS_FILE="$STATE_DIR/status"
+LOG_FILE="$STATE_DIR/sync.log"
+UPDATE_STAMP="$STATE_DIR/last-update"
+LOCK_DIR="$STATE_DIR/lock"
+# 7 days minus 2h, so a daily run at a slightly earlier time still counts.
+UPDATE_AFTER_MIN=$((7 * 24 * 60 - 120))
+OS="$(uname -s)"
+
+usage() {
+    cat <<'EOF'
+Usage: dotfiles-sync [--update | --no-update | --status]
+
+  (no option)   align; also update tools if the last update is 7+ days old
+  --update      align and update tools now
+  --no-update   align only
+  --status      show the result of the last run
+EOF
+}
+
+show_status() {
+    local state when
+    if [ ! -f "$STATUS_FILE" ]; then echo "dotfiles-sync has not run yet."; return 0; fi
+    read -r state when <"$STATUS_FILE"
+    echo "Last sync: $when ($state)"
+    tail -n +2 "$STATUS_FILE" | sed 's/^/  - /'
+    [ -f "$UPDATE_STAMP" ] && echo "Last tool update: $(cat "$UPDATE_STAMP")"
+    echo "Full log: $LOG_FILE"
+}
+
+MODE=auto
+case "${1:-}" in
+    "") ;;
+    --update) MODE=update ;;
+    --no-update) MODE=align ;;
+    --status) show_status; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "dotfiles-sync: unknown option '$1'" >&2; usage >&2; exit 2 ;;
+esac
+
+# Schedulers start us with a minimal PATH.
+for d in /usr/local/bin /opt/homebrew/bin "$HOME/.cargo/bin" "$HOME/.local/bin"; do
+    case ":$PATH:" in *":$d:"*) ;; *) [ -d "$d" ] && PATH="$d:$PATH" ;; esac
+done
+export PATH
+# Nobody can answer a prompt during a scheduled run; fail fast instead.
+if [ ! -t 0 ]; then
+    export GIT_TERMINAL_PROMPT=0
+    export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=15}"
+fi
+
+mkdir -p "$STATE_DIR"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    # A lock older than 2h is left over from a run that was killed (e.g. WSL shut down).
+    if [ -n "$(find "$LOCK_DIR" -maxdepth 0 -mmin +120 2>/dev/null)" ] && rmdir "$LOCK_DIR" && mkdir "$LOCK_DIR"; then :
+    else echo "dotfiles-sync: another run is in progress" >&2; exit 0; fi
+fi
+trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+
+NOTES=""
+ATTENTION=0
+note()      { NOTES="${NOTES}$1"$'\n'; echo "-> $1"; }
+attention() { ATTENTION=1; note "$1"; }
+
+run_install() {
+    echo
+    echo "== install.sh $* =="
+    "$DOTFILES/install.sh" "$@" </dev/null
+}
+
+sync_repo() {
+    local branch upstream ahead=0 behind=0 changes
+    echo "== repo =="
+    if ! git -C "$DOTFILES" fetch --quiet origin; then
+        note "repo: fetch failed (offline?), not updated"
+        return 0
+    fi
+    branch="$(git -C "$DOTFILES" rev-parse --abbrev-ref HEAD)"
+    upstream="$(git -C "$DOTFILES" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+    if [ -z "$upstream" ]; then
+        attention "repo: $branch has no upstream branch, not updated"
+    else
+        ahead="$(git -C "$DOTFILES" rev-list --count "$upstream..HEAD" 2>/dev/null || echo 0)"
+        behind="$(git -C "$DOTFILES" rev-list --count "HEAD..$upstream" 2>/dev/null || echo 0)"
+        if [ "$behind" -gt 0 ] && [ "$ahead" -eq 0 ]; then
+            # --ff-only refuses rather than overwrite files with local edits.
+            if git -C "$DOTFILES" merge --ff-only --quiet "$upstream"; then
+                echo "Fast-forwarded $behind commit(s) from $upstream"
+                git -C "$DOTFILES" submodule update --init --recursive --quiet
+            else
+                attention "repo: can't fast-forward $behind commit(s) from $upstream; local edits are in the way"
+            fi
+        elif [ "$behind" -gt 0 ]; then
+            attention "repo: diverged from $upstream ($ahead ahead, $behind behind); merge or rebase by hand"
+        elif [ "$ahead" -gt 0 ]; then
+            attention "repo: $ahead local commit(s) not pushed"
+        else
+            echo "Up to date with $upstream"
+        fi
+    fi
+    changes="$(git -C "$DOTFILES" status --porcelain | wc -l | tr -d ' ')"
+    if [ "$changes" -gt 0 ]; then attention "repo: $changes uncommitted change(s) in $DOTFILES"; fi
+}
+
+update_due() {
+    case "$MODE" in update) return 0 ;; align) return 1 ;; esac
+    [ ! -f "$UPDATE_STAMP" ] || [ -n "$(find "$UPDATE_STAMP" -mmin +"$UPDATE_AFTER_MIN" 2>/dev/null)" ]
+}
+
+# Updates the scheduled run may not do itself (sudo); surfaced once a week.
+report_sudo_updates() {
+    local n d cur="" latest
+    [ "$OS" = Linux ] || return 0
+    if command -v apt >/dev/null 2>&1; then
+        n="$(apt list --upgradable 2>/dev/null | grep -c 'upgradable from' || true)"
+        if [ "${n:-0}" -gt 0 ]; then
+            attention "apt: $n package upgrade(s) waiting (needs sudo): ./install.sh --update --only packages"
+        fi
+    fi
+    for d in /opt/nvim /opt/nvim-linux-x86_64 /opt/nvim-linux-arm64; do
+        if [ -x "$d/bin/nvim" ]; then cur="$("$d/bin/nvim" --version | head -n1 | awk '{print $2}')"; break; fi
+    done
+    latest="$(curl -fsSIL -o /dev/null -w '%{url_effective}' https://github.com/neovim/neovim/releases/latest 2>/dev/null || true)"
+    latest="${latest##*/}"
+    if [ -n "$cur" ] && [ -n "$latest" ] && [ "$latest" != latest ] && [ "$cur" != "$latest" ]; then
+        attention "nvim: $latest is out, you have $cur (needs sudo): ./install.sh --update --only packages"
+    fi
+}
+
+run_doctor() {
+    local out esc line
+    out="$(mktemp)"
+    esc="$(printf '\033')"
+    echo
+    echo "== doctor =="
+    if ! "$DOTFILES/install.sh" --check </dev/null 2>&1 | tee "$out"; then
+        while IFS= read -r line; do
+            attention "doctor: $line"
+        done < <(grep '✘' "$out" | sed "s/${esc}\[[0-9;]*m//g; s/^ *✘ *//" | tr -s ' ')
+        grep -q '✘' "$out" || attention "doctor: failed to run (see $LOG_FILE)"
+    fi
+    rm -f "$out"
+}
+
+write_status() {
+    local state=ok
+    [ "$ATTENTION" -eq 1 ] && state=attention
+    { echo "$state $(date '+%Y-%m-%d %H:%M %Z')"; printf '%s' "$NOTES"; } >"$STATUS_FILE.tmp"
+    mv -f "$STATUS_FILE.tmp" "$STATUS_FILE"
+}
+
+main() {
+    echo "dotfiles-sync $(date '+%Y-%m-%d %H:%M %Z') on $(uname -n) [$MODE]"
+    if [ ! -d "$DOTFILES/.git" ]; then
+        attention "repo: $DOTFILES is not a git checkout"
+        write_status
+        return 1
+    fi
+    sync_repo
+    run_install --only stow,windows || attention "restow / Windows sync failed (see $LOG_FILE)"
+    if update_due; then
+        local mods="extras,omz,tpm,nvm"
+        [ "$OS" = Darwin ] && mods="packages,$mods"
+        if run_install --update --only "$mods"; then
+            date '+%Y-%m-%d %H:%M %Z' >"$UPDATE_STAMP"
+        else
+            attention "tool update failed (see $LOG_FILE)"
+        fi
+        report_sudo_updates
+    fi
+    run_doctor
+    write_status
+    if [ "$ATTENTION" -eq 1 ] && [ "$OS" = Darwin ] && [ ! -t 0 ]; then
+        osascript -e 'display notification "Last sync needs attention: run dotfiles-sync --status" with title "dotfiles"' >/dev/null 2>&1 || true
+    fi
+    echo
+    echo "Result: $(head -n1 "$STATUS_FILE")"
+}
+
+[ -f "$LOG_FILE" ] && mv -f "$LOG_FILE" "$LOG_FILE.1"
+main 2>&1 | tee "$LOG_FILE"
+exit "${PIPESTATUS[0]}"

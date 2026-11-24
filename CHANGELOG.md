@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- `dotfiles-sync` (`local/.local/bin`): daily alignment (fast-forward the repo without touching local edits, restow, Windows git sync, `doctor`) and a weekly no-sudo tool update. Commits, pushes and sudo steps are reported, never done. Status and log go to `~/.local/state/dotfiles/`, and `--status` shows the details
+- `install.sh` `schedule` module (part of `--all`): runs `dotfiles-sync` daily from a systemd user timer on Linux/WSL (`systemd-linux/` package, `Persistent=true` catch-up) or a launchd agent on macOS; `doctor` reports whether it's active and when it last ran
+- `common.sh`: one-line notice in new terminals when the last sync needs attention or no sync has run for 3 days (in zsh it releases Powerlevel10k's instant prompt first, so p10k doesn't warn)
+- `install.sh --check-urls`: probes every download source the modules use (all architectures), driven by the same URL helpers the modules call
+- CI: weekly scheduled run, `workflow_dispatch`, a download-sources job, and smoke steps for the `schedule` module and `dotfiles-sync` (under `/bin/bash` 3.2 on macOS)
+
 - `install.sh` `windows` module (WSL only, part of `--all`): copies `.gitconfig`, `.gitconfig-xai` and `git-windows/.gitconfig.local` to the Windows host (`%USERPROFILE%`), backing up anything it replaces to `~/.dotfiles-backup/<timestamp>/windows/`
 - `git-windows/.gitconfig.local`: Windows keeps `core.autocrlf = true`; `less` replaces the delta pager while `delta.exe` isn't installed on Windows
 - `doctor` on WSL: fails when the Git Credential Manager path in `git-wsl/.gitconfig.local` doesn't exist, warns when the Windows git config drifts from the repo
@@ -33,6 +39,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- `extras --update`: uv and duckdb are only re-downloaded when a newer release exists
+- `windows` module: decides the delta pager fallback with Windows' own `where.exe` rather than WSL's `PATH`, so scheduled runs (which don't inherit the Windows `PATH`) write the same file as interactive ones
 - `.gitconfig`: `~/.gitconfig.local` is included last, so per-OS files can override shared settings
 - CI: `actions/checkout@v5` (Node 20 deprecation warning)
 - `install.sh` stow module no longer uses `stow --adopt` (which overwrote tracked files with whatever was in `$HOME`). Conflicting files are moved to `~/.dotfiles-backup/<timestamp>/` and packages are stowed with `--no-folding`
