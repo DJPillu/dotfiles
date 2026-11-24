@@ -10,7 +10,7 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install shellcheck
         run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
       - name: Lint
@@ -33,7 +33,7 @@ jobs:
     env:
       DOTFILES: ${{ github.workspace }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -66,6 +66,31 @@ jobs:
           err="$(zsh -c 'source ~/.zshrc; echo loaded' 2>&1 >/dev/null)"
           echo "stderr: ${err:-<none>}"
           test -z "$err"
+
+      - name: Git identity routing (work for ~/xAI or teachx GitLab remotes)
+        run: |
+          set -eu
+          check() { got="$(git -C "$1" config user.email)"; echo "$1 -> $got"; test "$got" = "$2"; }
+          t="$(mktemp -d)"
+          git init -q "$t/gitlab"     && git -C "$t/gitlab" remote add origin git@ssh.nova.teachx.ai:teachxai/x.git
+          git init -q "$t/gitlab-url" && git -C "$t/gitlab-url" remote add origin ssh://git@ssh.nova.teachx.ai/teachxai/x.git
+          git init -q "$t/github"     && git -C "$t/github" remote add origin git@github.com:DJPillu/x.git
+          mkdir -p "$HOME/xAI" && git init -q "$HOME/xAI/no-remote"
+          check "$t/gitlab"           rarora@teachx.ai
+          check "$t/gitlab-url"       rarora@teachx.ai
+          check "$HOME/xAI/no-remote" rarora@teachx.ai
+          check "$t/github"           rujularoracs@gmail.com
+
+      - name: Windows sync module (fake %USERPROFILE%)
+        run: |
+          set -eu
+          WIN_HOME="$(mktemp -d)"; export WIN_HOME
+          ./install.sh --only windows
+          out="$(./install.sh --only windows)"
+          echo "$out"
+          test "$(echo "$out" | grep -c 'already in sync')" -eq 3
+          test "$(git config -f "$WIN_HOME/.gitconfig.local" core.autocrlf)" = true
+          test "$(git config -f "$WIN_HOME/.gitconfig" user.email)" = rujularoracs@gmail.com
 
       - name: Doctor (informational — tools are not installed on runners)
         continue-on-error: true
