@@ -1,0 +1,8 @@
+# Windows host git settings (included from ~/.gitconfig). Not stowed: the
+# install.sh windows module, run from WSL, copies it to %USERPROFILE%.
+#
+# No credential.helper here: Git for Windows' system config already sets
+# `manager`, and a second entry would make git query it twice.
+[core]
+	# Keep Windows CRLF checkouts; the shared .gitconfig uses input.
+	autocrlf = true

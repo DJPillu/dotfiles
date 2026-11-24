@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- `install.sh` `windows` module (WSL only, part of `--all`): copies `.gitconfig`, `.gitconfig-xai` and `git-windows/.gitconfig.local` to the Windows host (`%USERPROFILE%`), backing up anything it replaces to `~/.dotfiles-backup/<timestamp>/windows/`
+- `git-windows/.gitconfig.local`: Windows keeps `core.autocrlf = true`; `less` replaces the delta pager while `delta.exe` isn't installed on Windows
+- `doctor` on WSL: fails when the Git Credential Manager path in `git-wsl/.gitconfig.local` doesn't exist, warns when the Windows git config drifts from the repo
+- `.gitconfig`: the work identity also applies to any repo whose remote is the teachx GitLab, not only to repos under `~/xAI/`
+- CI: git identity routing check and a `windows` module run against a fake `%USERPROFILE%` (`WIN_HOME`)
+
 - `bootstrap.sh`: zero-prerequisite one-liner (`curl ... | bash`) that installs git/curl (Xcode CLT + Homebrew on macOS), clones over HTTPS, and runs `install.sh --all` with a single up-front `sudo` prompt
 - `install.sh` `extras` module: rustup, miniforge (`~/miniforge3`), uv, duckdb, gh; Nerd Fonts and Ghostty/Alacritty casks on macOS; winget hints for the Windows side on WSL
 - `install.sh` `doctor` module / `--check`: verifies tool paths and versions (incl. `nvim` >= 0.10 and not the apt build), stow symlinks, `~/.ssh` permissions, tmux plugins location, and repo cleanliness
@@ -27,6 +33,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- `.gitconfig`: `~/.gitconfig.local` is included last, so per-OS files can override shared settings
+- CI: `actions/checkout@v5` (Node 20 deprecation warning)
 - `install.sh` stow module no longer uses `stow --adopt` (which overwrote tracked files with whatever was in `$HOME`). Conflicting files are moved to `~/.dotfiles-backup/<timestamp>/` and packages are stowed with `--no-folding`
 - `install.sh`: installers may not edit rc files (`PROFILE=/dev/null` for nvm, `rustup --no-modify-path`, miniforge `-b`, `UV_NO_MODIFY_PATH`, `NONINTERACTIVE=1` Homebrew)
 - `install.sh`: detects macOS / WSL / Debian explicitly, errors on unsupported distros, reads the interactive menu from `/dev/tty`, and names the failing module on error
@@ -47,6 +55,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- WSL git credential helper pointed at `Git/mingw64/bin/git-credential-manager.exe`, which current Git for Windows no longer ships (now `Git/ucrt64/bin/`)
+- `extras` WSL hint and README suggested `winget install Microsoft.CascadiaCode`, a package ID that doesn't exist
 - Shell start errors on a fresh machine: `~/.cargo/env`, `~/.local/bin/env`, conda, fzf and zoxide are all guarded
 - Hardcoded `/Users/rujul/.duckdb` path in `.zshrc`
 - `EDITOR` was `vim` in zsh and unset in bash; now `nvim` on both

@@ -44,6 +44,7 @@ OS-specific shell configs use a `.d` source directory pattern.
 ├── git-macos/      .gitconfig.local (osxkeychain credential helper)
 ├── git-wsl/        .gitconfig.local (Git Credential Manager from Git for Windows)
 ├── git-linux/      .gitconfig.local (cache credential helper)
+├── git-windows/    .gitconfig.local (Windows host: CRLF, pager fallback) — copied by the windows module, not stowed
 ├── local/          .local/bin/ (env, tmux-copy)
 ├── nvim/           .config/nvim/ (LazyVim)
 ├── tmux/           .config/tmux/tmux.conf
@@ -56,7 +57,7 @@ OS-specific shell configs use a `.d` source directory pattern.
 └── install.sh      Modular installer
 ```
 
-**Platform model:** macOS uses zsh (`zsh-macos` + `git-macos` stowed); WSL uses bash (`bash-linux` + `git-wsl` stowed).
+**Platform model:** macOS uses zsh (`zsh-macos` + `git-macos` stowed); WSL uses bash (`bash-linux` + `git-wsl` stowed). From WSL, the `windows` module also keeps the Windows host's git config in sync (see [Windows side](#windows-side-wsl)).
 
 ## Install Script
 
@@ -68,6 +69,7 @@ The installer is modular — run it interactively to pick modules, or use CLI fl
 ./install.sh --only packages,stow
 ./install.sh --exclude omz,tpm
 ./install.sh --check             # run only the doctor
+./install.sh --only windows      # WSL: re-sync the Windows git config
 ./install.sh --all --update      # upgrade brew/apt, nvim, omz, plugins, tpm, nvm
 ```
 
@@ -80,7 +82,8 @@ The installer is modular — run it interactively to pick modules, or use CLI fl
 | stow       | Symlinks all packages into `$HOME`. Existing files that would conflict are moved to `~/.dotfiles-backup/<timestamp>/` (never adopted into the repo). Uses `--no-folding` so `~/.ssh`, `~/.local/bin`, `~/.config/*` stay real directories |
 | tpm        | Tmux Plugin Manager, then installs the plugins listed in `tmux.conf` |
 | nvm        | Node Version Manager (latest release, no rc edits) |
-| doctor     | Verifies tool paths and versions (flags `nvim` < 0.10 or the apt build shadowing `/opt`), stow symlinks, `~/.ssh` permissions, and that the repo is clean |
+| windows    | WSL only: copies the git config to the Windows host and backs up whatever it replaces (see [Windows side](#windows-side-wsl)). No-op elsewhere |
+| doctor     | Verifies tool paths and versions (flags `nvim` < 0.10 or the apt build shadowing `/opt`), stow symlinks, `~/.ssh` permissions, and that the repo is clean. On WSL it also checks the Git Credential Manager path and that the Windows git config matches the repo |
 
 `doctor` runs at the end of `--all` and exits non-zero on problems.
 
@@ -92,14 +95,30 @@ The installer is modular — run it interactively to pick modules, or use CLI fl
 
 ## Windows side (WSL)
 
-Everything inside WSL is handled by the installer. Two things live on the Windows host and must be done once, in PowerShell:
+Windows programs can't follow symlinks into the WSL filesystem, so the Windows host gets copies instead of stow links. The `windows` module (part of `--all`, a no-op outside WSL) writes these into `%USERPROFILE%`:
+
+| Windows file | Source |
+|---|---|
+| `.gitconfig` | `git/.gitconfig`: shared settings and identity rules |
+| `.gitconfig-xai` | `git/.gitconfig-xai`: work identity |
+| `.gitconfig.local` | `git-windows/.gitconfig.local`: keeps `core.autocrlf = true`; uses `less` as pager while `delta.exe` isn't installed on Windows |
+
+Sync is one-way: edit the repo copy, then re-run `./install.sh --only windows`. A Windows file that differs is saved to `~/.dotfiles-backup/<timestamp>/windows/` before being replaced, and `doctor` warns when the Windows copies drift.
+
+**Git identity** is the same on every machine: personal by default, and the work identity (`~/.gitconfig-xai`) for repos under `~/xAI/` or whose remote is the teachx GitLab (`git@ssh.nova.teachx.ai:…` or `ssh://git@ssh.nova.teachx.ai/…`).
+
+**Credentials:** Windows git uses its own `credential.helper = manager`. Inside WSL, `git-wsl/.gitconfig.local` points git at that same Git Credential Manager (`C:\Program Files\Git\ucrt64\bin\`), so HTTPS logins are shared; `doctor` fails if that path disappears after a Git for Windows update.
+
+Not synced on purpose: the Windows `~/.ssh/config` (some hosts use keys that only exist in WSL), the PowerShell profile, Windows Terminal settings and `.wslconfig`.
+
+The terminal font is a one-time manual step, in PowerShell:
 
 ```powershell
 winget install --id Microsoft.WindowsTerminal -e
-winget install --id DEVCOM.JetBrainsMonoNerdFont -e     # or Microsoft.CascadiaCode for "Cascadia Mono NF"
+winget install --id DEVCOM.JetBrainsMonoNerdFont -e
 ```
 
-Then set the terminal font to the Nerd Font so eza / p10k icons render. `doctor` reminds you of this on WSL.
+Then set the Windows Terminal font to `JetBrainsMono Nerd Font` so eza / p10k icons render. `doctor` reminds you of this on WSL.
 
 ## Ghostty (macOS)
 
@@ -147,7 +166,9 @@ git add ghostty/.config/ghostty/shaders && git commit -m "chore: update ghostty 
 ## Development
 
 `shellcheck` runs on every push (see `.github/workflows/ci.yml`) along with a
-smoke run of `./install.sh --only stow,doctor` on Ubuntu and macOS. Locally:
+smoke run of `./install.sh --only stow,doctor` on Ubuntu and macOS, a git
+identity routing check, and the `windows` module against a fake
+`%USERPROFILE%` (`WIN_HOME=<dir>`). Locally:
 
 ```bash
 shellcheck install.sh bootstrap.sh bash/.bashrc bash-linux/.bashrc.d/*.sh shell/.config/shell/common.sh

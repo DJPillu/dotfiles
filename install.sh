@@ -119,7 +119,7 @@ version_ge() {
 }
 
 # ── Available modules ────────────────────────────────────────────
-ALL_MODULES=(submodules packages extras omz stow tpm nvm doctor)
+ALL_MODULES=(submodules packages extras omz stow tpm nvm windows doctor)
 
 valid_module() {
     local mod="$1"
@@ -160,6 +160,8 @@ Modules:
   stow        Symlink config packages into $HOME (conflicts backed up)
   tpm         Tmux Plugin Manager + plugins
   nvm         Node Version Manager
+  windows     WSL only: copy the git config to the Windows host (backs up
+              what it replaces)
   doctor      Verify tools, versions and symlinks
 EOF
     exit 0
@@ -392,11 +394,10 @@ if enabled extras; then
         fi
         if $IS_WSL; then
             echo ""
-            info "Windows-side (cannot be done from WSL) — run in PowerShell:"
+            info "Windows-side, run once in PowerShell:"
             echo "    winget install --id Microsoft.WindowsTerminal -e"
             echo "    winget install --id DEVCOM.JetBrainsMonoNerdFont -e"
-            echo "    winget install --id Microsoft.CascadiaCode -e      # includes 'Cascadia Mono NF'"
-            echo "  then set the terminal font to a Nerd Font for icons in eza/p10k."
+            echo "  then set the terminal font to 'JetBrainsMono Nerd Font' for icons in eza/p10k."
         fi
     fi
 fi
@@ -568,6 +569,73 @@ if enabled nvm; then
     fi
 fi
 
+# ── Windows host (WSL) ───────────────────────────────────────────
+# Windows programs can't follow symlinks into the WSL filesystem, so these
+# files are copied rather than stowed. WIN_HOME overrides the target (CI).
+WIN_FILES=(.gitconfig .gitconfig-xai .gitconfig.local)
+WIN_HEADER="# Managed by ~/.dotfiles (install.sh windows module). Edit the repo copy, then run: ./install.sh --only windows"
+
+win_home() {
+    local p=""
+    if [[ -n "${WIN_HOME:-}" ]]; then echo "$WIN_HOME"; return 0; fi
+    $IS_WSL || return 1
+    if have wslvar; then p="$(wslvar USERPROFILE 2>/dev/null | tr -d '\r' || true)"; fi
+    if [[ -z "$p" ]] && have cmd.exe; then
+        p="$(cd /mnt/c && cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r' || true)"
+    fi
+    [[ -n "$p" ]] && wslpath -u "$p"
+}
+
+# Content the windows module writes for each name in WIN_FILES.
+win_render() {
+    printf '%s\n' "$WIN_HEADER"
+    case "$1" in
+        .gitconfig|.gitconfig-xai) cat "$DOTFILES/git/$1" ;;
+        .gitconfig.local)
+            cat "$DOTFILES/git-windows/.gitconfig.local"
+            # The shared .gitconfig pages through delta; without delta.exe,
+            # Windows git would print an error on every log/diff.
+            if ! have delta.exe; then
+                printf '\n# delta.exe is not on the Windows PATH: plain pager instead.\n[core]\n\tpager = less\n[interactive]\n\tdiffFilter = cat\n'
+            fi ;;
+    esac
+}
+
+win_sync_file() {
+    local name="$1" dest="$2/$1" tmp
+    tmp="$(mktemp)"
+    win_render "$name" >"$tmp"
+    if [[ -f "$dest" ]] && cmp -s "$tmp" "$dest"; then
+        ok "$name already in sync"
+    else
+        if [[ -e "$dest" ]]; then
+            mkdir -p "$BACKUP_DIR/windows"
+            cp "$dest" "$BACKUP_DIR/windows/$name"
+            warn "Previous $name saved to $BACKUP_DIR/windows/$name"
+        fi
+        # Overwrite in place (no mv) so the file keeps its Windows ACLs.
+        cat "$tmp" >"$dest"
+        ok "Wrote $name"
+    fi
+    rm -f "$tmp"
+}
+
+# ── Module: windows ──────────────────────────────────────────────
+if enabled windows; then
+    section "windows"
+    WIN_DIR="$(win_home || true)"
+    if [[ -z "$WIN_DIR" ]]; then
+        if $IS_WSL; then warn "Could not resolve the Windows home (%USERPROFILE%); is WSL interop enabled?"
+        else info "Not running under WSL; nothing to sync to Windows"; fi
+    elif [[ ! -d "$WIN_DIR" ]]; then
+        warn "Windows home $WIN_DIR does not exist; skipping"
+    else
+        info "Syncing git config to $WIN_DIR"
+        for name in "${WIN_FILES[@]}"; do win_sync_file "$name" "$WIN_DIR"; done
+        have delta.exe || info "Windows git pages with less until delta is installed: winget install --id dandavison.delta -e"
+    fi
+fi
+
 # ── Module: doctor ───────────────────────────────────────────────
 if enabled doctor; then
     section "doctor"
@@ -661,7 +729,26 @@ if enabled doctor; then
     fi
 
     if $IS_WSL; then
-        echo "Windows side (manual):"
+        echo "Windows side:"
+        GIT_HELPER="$(git config --get credential.helper 2>/dev/null || true)"
+        GIT_HELPER="${GIT_HELPER//\\ / }"
+        if [[ "$GIT_HELPER" != /* ]]; then
+            dr_warn "git creds" "credential.helper is '${GIT_HELPER:-unset}', expected Git Credential Manager"
+        elif [[ -x "$GIT_HELPER" ]]; then
+            dr_ok "git creds" "$GIT_HELPER"
+        else
+            dr_fail "git creds" "$GIT_HELPER missing (Git for Windows moved GCM?); fix git-wsl/.gitconfig.local"
+        fi
+        WIN_DIR="$(win_home || true)"
+        if [[ -z "$WIN_DIR" ]]; then
+            dr_warn "windows home" "could not resolve %USERPROFILE% (WSL interop off?)"
+        else
+            for name in "${WIN_FILES[@]}"; do
+                if [[ ! -f "$WIN_DIR/$name" ]]; then dr_warn "win ~/$name" "missing (windows module)"
+                elif cmp -s <(win_render "$name") "$WIN_DIR/$name"; then dr_ok "win ~/$name" "in sync"
+                else dr_warn "win ~/$name" "differs from the repo (edited on Windows?); ./install.sh --only windows"; fi
+            done
+        fi
         dr_warn "terminal font" "set Windows Terminal font to a Nerd Font (winget install DEVCOM.JetBrainsMonoNerdFont)"
     fi
 
