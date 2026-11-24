@@ -2,12 +2,14 @@
     name = Rujul Arora
     email = rujularoracs@gmail.com
 
+# Work identity: anything under ~/xAI, or any repo whose remote is the teachx
+# GitLab (covers work clones that live elsewhere, e.g. on the Windows side).
 [includeIf "gitdir/i:~/xAI/"]
     path = ~/.gitconfig-xai
-
-# OS-specific settings (credential helper etc.), stowed from git-macos/ or git-linux/
-[include]
-    path = ~/.gitconfig.local
+[includeIf "hasconfig:remote.*.url:git@ssh.nova.teachx.ai:*/**"]
+    path = ~/.gitconfig-xai
+[includeIf "hasconfig:remote.*.url:ssh://git@ssh.nova.teachx.ai/**"]
+    path = ~/.gitconfig-xai
 
 [init]
 	defaultBranch = main
@@ -41,3 +43,9 @@
 
 [rerere]
 	enabled = true
+
+# OS-specific settings (credential helper, Windows line endings), from
+# git-macos/, git-wsl/, git-linux/ or git-windows/. Kept last so it can
+# override anything above.
+[include]
+    path = ~/.gitconfig.local

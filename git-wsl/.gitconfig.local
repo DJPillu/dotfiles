@@ -2,5 +2,7 @@
 #
 # Reuse Git Credential Manager from Git for Windows so HTTPS remotes share the
 # Windows credential store. The path must be quoted because of the spaces.
+# Current Git for Windows ships it under ucrt64/ (older releases: mingw64/);
+# `./install.sh --check` flags it if the path disappears again.
 [credential]
-	helper = "/mnt/c/Program\\ Files/Git/mingw64/bin/git-credential-manager.exe"
+	helper = "/mnt/c/Program\\ Files/Git/ucrt64/bin/git-credential-manager.exe"
