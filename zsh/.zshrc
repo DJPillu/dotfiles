@@ -62,4 +62,5 @@ export REPORTTIME=3              # print timing for commands > 3s
 # ── Shared cross-shell config (aliases, fzf, zoxide, nvm, EDITOR, PATH) ─
 [[ -f "$HOME/.config/shell/common.sh" ]] && source "$HOME/.config/shell/common.sh"
 
-[[ ! -f "${POWERLEVEL9K_CONFIG_FILE}" ]] || source "${POWERLEVEL9K_CONFIG_FILE}"
+# Unbraced so `p10k configure` recognizes this line and doesn't append its own.
+[[ ! -f "$POWERLEVEL9K_CONFIG_FILE" ]] || source "$POWERLEVEL9K_CONFIG_FILE"

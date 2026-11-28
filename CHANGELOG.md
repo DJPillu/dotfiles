@@ -41,6 +41,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- `.p10k.zsh`: regenerated with `p10k configure` in the Pure style
+
 - `extras --update`: uv and duckdb are only re-downloaded when a newer release exists
 - `windows` module: decides the delta pager fallback with Windows' own `where.exe` rather than WSL's `PATH`, so scheduled runs (which don't inherit the Windows `PATH`) write the same file as interactive ones
 - `.gitconfig`: `~/.gitconfig.local` is included last, so per-OS files can override shared settings
@@ -67,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 - `zsh/.zshrc`: grok completions are put on `fpath` before `compinit`, replacing the block the grok installer appended (two `PATH` prepends, one hardcoding `/Users/rujul`, and a second `compinit -C`); `common.sh` already adds `~/.grok/bin`
 - `Brewfile`: `brew bundle` (and so every weekly `dotfiles-sync` update on macOS) failed because Homebrew removed the `tldr` formula (now `tlrc`, same `tldr` binary) and disabled the `alacritty` cask for failing Gatekeeper; the cask is dropped
+- `zsh/.zshrc`: `p10k configure` didn't recognize the braced `"${POWERLEVEL9K_CONFIG_FILE}"` source line and appended a second `source ~/.p10k.zsh`
 
 - WSL git credential helper pointed at `Git/mingw64/bin/git-credential-manager.exe`, which current Git for Windows no longer ships (now `Git/ucrt64/bin/`)
 - `extras` WSL hint and README suggested `winget install Microsoft.CascadiaCode`, a package ID that doesn't exist
