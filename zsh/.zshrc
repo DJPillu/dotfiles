@@ -32,6 +32,9 @@ plugins=(
   fzf
 )
 
+# Must be on fpath before compinit runs (omz or the fallback below).
+[[ -d "$HOME/.grok/completions/zsh" ]] && fpath=("$HOME/.grok/completions/zsh" $fpath)
+
 if [[ -f "$ZSH/oh-my-zsh.sh" ]]; then
   source "$ZSH/oh-my-zsh.sh"
 else
