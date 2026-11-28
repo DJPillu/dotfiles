@@ -13,15 +13,15 @@ brew "openjdk"
 brew "pyenv"
 brew "ripgrep"
 brew "stow"
-brew "tldr"
+brew "tlrc"
 brew "tmux"
 brew "uv"
 brew "wget"
 brew "zoxide"
 
-# Terminal emulators (configs in ghostty/ and alacritty/)
+# Terminal emulator (config in ghostty/). The alacritty cask is disabled for
+# failing Gatekeeper, so Alacritty (config in alacritty/) is not installed here.
 cask "ghostty"
-cask "alacritty"
 
 # Nerd Fonts used by the terminal configs (Ghostty: Cascadia Mono NF, Alacritty: JetBrainsMono NF)
 cask "font-cascadia-mono-nf"
