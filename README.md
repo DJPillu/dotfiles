@@ -79,7 +79,7 @@ The installer is modular — run it interactively to pick modules, or use CLI fl
 |------------|-------------|
 | submodules | Initialises git submodules (ghostty shaders) |
 | packages   | CLI tools via Homebrew (macOS) or apt (Ubuntu). On Linux also installs the latest Neovim tarball to `/opt/nvim` (apt's neovim is too old for LazyVim) |
-| extras     | Tools the shell configs assume: `rustup`, `miniforge` (`~/miniforge3`), `uv`, `duckdb`, `gh`; Nerd Fonts and Ghostty/Alacritty casks on macOS. None of these installers are allowed to edit rc files |
+| extras     | Tools the shell configs assume: `rustup`, `miniforge` (`~/miniforge3`), `uv`, `duckdb`, `gh`; Nerd Fonts and the Ghostty cask on macOS. None of these installers are allowed to edit rc files |
 | omz        | Oh My Zsh, zsh-autosuggestions / syntax-highlighting / completions, Powerlevel10k |
 | stow       | Symlinks all packages into `$HOME`. Existing files that would conflict are moved to `~/.dotfiles-backup/<timestamp>/` (never adopted into the repo). Uses `--no-folding` so `~/.ssh`, `~/.local/bin`, `~/.config/*` stay real directories |
 | tpm        | Tmux Plugin Manager, then installs the plugins listed in `tmux.conf` |

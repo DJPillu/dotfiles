@@ -66,6 +66,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 
 - `zsh/.zshrc`: grok completions are put on `fpath` before `compinit`, replacing the block the grok installer appended (two `PATH` prepends, one hardcoding `/Users/rujul`, and a second `compinit -C`); `common.sh` already adds `~/.grok/bin`
+- `Brewfile`: `brew bundle` (and so every weekly `dotfiles-sync` update on macOS) failed because Homebrew removed the `tldr` formula (now `tlrc`, same `tldr` binary) and disabled the `alacritty` cask for failing Gatekeeper; the cask is dropped
 
 - WSL git credential helper pointed at `Git/mingw64/bin/git-credential-manager.exe`, which current Git for Windows no longer ships (now `Git/ucrt64/bin/`)
 - `extras` WSL hint and README suggested `winget install Microsoft.CascadiaCode`, a package ID that doesn't exist
