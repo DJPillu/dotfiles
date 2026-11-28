@@ -65,6 +65,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- `zsh/.zshrc`: grok completions are put on `fpath` before `compinit`, replacing the block the grok installer appended (two `PATH` prepends, one hardcoding `/Users/rujul`, and a second `compinit -C`); `common.sh` already adds `~/.grok/bin`
+
 - WSL git credential helper pointed at `Git/mingw64/bin/git-credential-manager.exe`, which current Git for Windows no longer ships (now `Git/ucrt64/bin/`)
 - `extras` WSL hint and README suggested `winget install Microsoft.CascadiaCode`, a package ID that doesn't exist
 - `extras` on Linux: duckdb 2.x publishes `duckdb-cli-linux-<arch>.tar.gz` (the old `duckdb_cli-linux-<arch>.zip` 404s); a symlink left by the official installer is replaced rather than written through
