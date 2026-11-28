@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- `ssh/.ssh/config`: `pc` host (192.168.0.23)
+
 - `dotfiles-sync` (`local/.local/bin`): daily alignment (fast-forward the repo without touching local edits, restow, Windows git sync, `doctor`) and a weekly no-sudo tool update. Commits, pushes and sudo steps are reported, never done. Status and log go to `~/.local/state/dotfiles/`, and `--status` shows the details
 - `install.sh` `schedule` module (part of `--all`): runs `dotfiles-sync` daily from a systemd user timer on Linux/WSL (`systemd-linux/` package, `Persistent=true` catch-up) or a launchd agent on macOS; `doctor` reports whether it's active and when it last ran
 - `common.sh`: one-line notice in new terminals when the last sync needs attention or no sync has run for 3 days (in zsh it releases Powerlevel10k's instant prompt first, so p10k doesn't warn)
